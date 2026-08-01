@@ -10325,6 +10325,29 @@ async function combatHeroTurnEndRemote(campaignId, heroId){
   if(error){ alert('Could not end that turn: ' + error.message); return null; }
   return data ? data.data : null;
 }
+// Surges (Heroes rulebook p.75): any campaign member can adjust any hero's
+// surge count -- not just the owner -- because the common case is one
+// player's ability granting surges to a different player's hero (e.g.
+// Blessed Light). Stored in combat_state.heroSurges, same shape as
+// heroResources, and reset implicitly every time a new combat starts since
+// that object is rebuilt from scratch (surges don't survive to the next
+// fight per RAW). Server clamps the result at >= 0.
+async function combatSurgeAdjustRemote(campaignId, heroId, delta){
+  const { data, error } = await sb.rpc('combat_hero_surge_adjust', { p_campaign_id: campaignId, p_hero_id: heroId, p_delta: delta||0 });
+  if(error){ alert('Could not update surges: ' + error.message); return null; }
+  return data ? data.data : null;
+}
+// Any campaign member can subtract damage from a tracked monster or minion
+// squad pool -- not just the Director -- since the usual case is a player
+// rolling their own attack digitally and wanting it to land immediately
+// rather than waiting for the DM to type it in. Works identically for a
+// single monster's staminaCurrent and a minion squad's shared pool; the
+// server just clamps to [0, staminaMax] either way.
+async function combatApplyDamageRemote(campaignId, monsterId, amount){
+  const { data, error } = await sb.rpc('combat_apply_damage', { p_campaign_id: campaignId, p_monster_id: monsterId, p_amount: amount||0 });
+  if(error){ alert('Could not apply damage: ' + error.message); return null; }
+  return data ? data.data : null;
+}
 // Heroic Resource "in Combat" sidebar text is the same shape for all 9
 // classes (Heroes rulebook Ch.5): a flat amount or a die roll at the start
 // of each of the hero's own turns. Each class's amount lives on CLASSES
@@ -10346,6 +10369,45 @@ function heroicResourceGainForClass(className){
 // unmodified (strong). Returns null for a hero with no potency characteristic
 // on record (shouldn't happen for any of the 9 classes) so callers can hide
 // the display rather than show a wrong 0.
+function tierTextFor(effect, tierNum){
+  if(!effect || !tierNum) return '';
+  const parsed = parseTieredEffect(effect) || parseTieredEffectB(effect) || parseTieredEffectC(effect);
+  if(!parsed) return '';
+  const t = parsed.tiers.find(x=>x.n===tierNum);
+  return t ? t.text : '';
+}
+// Best-effort only: catches the common "N damage" / "N + Characteristic
+// damage" phrasing and returns the flat N as a starting suggestion. Dice
+// notation ("2d6 damage"), condition-only tiers, and anything else it
+// doesn't recognize are left blank on purpose rather than guessed at --
+// the player always sees and can overwrite this before it's applied.
+function suggestDamageFromText(text){
+  if(!text) return '';
+  if(/\d+\s*d\s*\d+/i.test(text)) return ''; // dice notation (e.g. "2d6 damage") -- never reduce that to a flat guess
+  const m = /(\d+)\s*(?:\+\s*\w+\s*)?damage/i.exec(text);
+  return m ? m[1] : '';
+}
+function monsterTargetLabel(m){
+  if(m.isMinionSquad){
+    return `${m.name} -- ${minionAliveCount(m)}/${m.squadSize} alive (pool ${m.staminaCurrent}/${m.staminaMax})`;
+  }
+  return `${m.name} -- ${m.staminaCurrent}/${m.staminaMax} Stamina${m.staminaCurrent<=0?' (down)':''}`;
+}
+function combatAllies(c){
+  const combat = state.activeCombat;
+  if(!combat || !c) return [];
+  const ids = new Set(combat.heroIds || []);
+  return (state.campaignHeroes || []).filter(h => ids.has(h.id) && h.id !== c.id);
+}
+// Same trail-extraction the ability card display uses, exposed standalone
+// so the ally-target control (which needs to know whether THIS effect has
+// a secondary targetable bit, e.g. "one ally in range picks up surges...")
+// doesn't have to re-render the whole tier table to find out.
+function getEffectTrail(effect){
+  if(!effect) return '';
+  const parsed = parseTieredEffect(effect) || parseTieredEffectB(effect) || parseTieredEffectC(effect);
+  return parsed ? (parsed.trail || '') : '';
+}
 function heroPotency(hero){
   const cls = hero && findClassData(hero.class);
   const key = cls && cls.potency;
@@ -10459,6 +10521,18 @@ window.addEventListener('visibilitychange', ()=>{
 // tracked instance per individual creature -- simplest model that works for
 // both Hordes and Minions without guessing at squad-shared-Stamina rules
 // that haven't been confirmed against the book yet.
+// Minions (Monsters rulebook p.7, "Using Minions") don't get one Stamina
+// pool each -- a whole squad (same name, up to 8) shares one pool equal to
+// per-minion Stamina x squad size, and a minion dies each time the pool
+// crosses a multiple of that per-minion value. Which physical miniature
+// dies is a table/narrative choice (the attacking player's, when more than
+// one goes down from a single non-area hit) that has no mechanical
+// consequence here since squad members are otherwise identical, so it's
+// intentionally not modeled as separate tracked instances -- just the pool
+// plus a derived alive-count. Area effects killing only minions actually
+// in the area (also p.7) isn't modeled yet; this app has no battle map, so
+// that nuance is left for the table to adjudicate and is called out in the
+// Combat tab rather than silently assumed away.
 function buildCombatMonsters(entries){
   let idx = 0;
   const out = [];
@@ -10466,20 +10540,47 @@ function buildCombatMonsters(entries){
     const m = findMonsterData(entry.monsterName);
     const staminaMax = Number(m ? m.stamina : 0) || 0;
     const count = Number(entry.count) || 0;
-    for(let i=0;i<count;i++){
+    const isMinion = /^minion/i.test(entry.role || (m && m.role) || '');
+    if(isMinion && count > 0){
       idx++;
+      const poolMax = staminaMax * count;
       out.push({
         id: 'm' + idx,
-        name: entry.monsterName + (count > 1 ? ' #' + (i+1) : ''),
+        name: entry.monsterName + ' Squad',
         baseName: entry.monsterName,
         group: Number(entry.group) || 1,
         role: entry.role || '',
-        staminaMax, staminaCurrent: staminaMax,
+        isMinionSquad: true,
+        squadSize: count,
+        perMinionStamina: staminaMax,
+        staminaMax: poolMax, staminaCurrent: poolMax,
         conditions: []
       });
+    } else {
+      for(let i=0;i<count;i++){
+        idx++;
+        out.push({
+          id: 'm' + idx,
+          name: entry.monsterName + (count > 1 ? ' #' + (i+1) : ''),
+          baseName: entry.monsterName,
+          group: Number(entry.group) || 1,
+          role: entry.role || '',
+          staminaMax, staminaCurrent: staminaMax,
+          conditions: []
+        });
+      }
     }
   });
   return out;
+}
+// Squad members remaining, derived from the pool rather than stored, so it
+// can never drift out of sync with staminaCurrent. Death thresholds land
+// exactly on multiples of perMinionStamina per the book's own example
+// (40 -> 35 drops the first of 8, 35 -> 30 the next, ...).
+function minionAliveCount(m){
+  if(!m || !m.isMinionSquad || !m.perMinionStamina) return 0;
+  if((Number(m.staminaCurrent)||0) <= 0) return 0;
+  return Math.min(m.squadSize, Math.ceil(m.staminaCurrent / m.perMinionStamina));
 }
 function combatMonsterGroups(combat){
   const groups = {};
@@ -10708,6 +10809,7 @@ const state = {
   monsterRollResults: {},       // UI-only: last dice roll per monster ability id
   bleedRollResult: null,        // UI-only: last bleeding-damage roll (1d6 + level) for the current hero
   levelUpFlow: null,            // {steps, index, fromLevel, toLevel} while the guided Level-Up modal is open
+  combatActionNote: null,       // last combat-tab action result (surge spend/grant, damage applied) -- shown as a banner until the next action
   monsterAbilityTarget: {},     // UI-only: selected potency-check target hero per ability id
   expandedMonsterGroups: new Set(), // UI-only: which monster group cards are expanded
   monsterLibraryFilter: { search:'', org:'', role:'', family:'', sort:'name' }, // UI-only: Encounter Builder library controls
@@ -10992,6 +11094,8 @@ const app = {
     const round1Gain = maliceRoundGain(heroIds.length, 1);
     const heroResources = {};
     heroesFull.forEach(h=>{ heroResources[h.id] = Number(h.victories) || 0; });
+    const heroSurges = {};
+    heroesFull.forEach(h=>{ heroSurges[h.id] = 0; });
     // Seed each unique monster's action list from the book instead of
     // leaving it for the Director to type in from scratch. A homebrew/custom
     // monster (not in MONSTER_LIBRARY) just starts with an empty list, same
@@ -11021,6 +11125,7 @@ const app = {
       monsterAbilities,
       heroIds,
       heroResources,
+      heroSurges,
       log: [
         { ts: Date.now(), text: 'Combat started: ' + (name || 'Encounter') },
         { ts: Date.now(), text: `Malice: +${startMalice} (avg Victories) +${round1Gain} (${heroIds.length} heroes + round 1) = ${startMalice + round1Gain}` }
@@ -11140,6 +11245,85 @@ const app = {
     if(!c || !c.campaignId) return;
     const data = await combatHeroTurnEndRemote(c.campaignId, heroId);
     if(data) state.activeCombat = data;
+    renderMain();
+  },
+  // Surges (Heroes rulebook p.75). Three entry points:
+  // - grantSurgeToAlly: an ability's secondary effect (e.g. Blessed Light)
+  //   hands surges to a different hero -- any campaign member can do this
+  //   since the caster is granting to someone else's tracker, not their own.
+  // - adjustMySurges: manual +/- for any case the app doesn't model
+  //   (a Director ruling, a homebrew effect, correcting a misclick).
+  // - spendSurgesForDamage / spendSurgesForPotency: the two RAW-defined
+  //   spends. Both just deduct from the tracker and surface the computed
+  //   number locally -- there's no automatic damage/potency pipeline yet
+  //   (that's enemy-targeting, tracked separately), so the player reads the
+  //   bonus off screen and applies it at the table same as any other roll.
+  async grantSurgeToAlly(abilityId, targetHeroId, amount){
+    const c = state.current;
+    if(!c || !c.campaignId || !targetHeroId) return;
+    const n = Math.max(1, Math.floor(Number(amount)) || 1);
+    const data = await combatSurgeAdjustRemote(c.campaignId, targetHeroId, n);
+    if(!data) return;
+    state.activeCombat = data;
+    const targetName = (state.campaignHeroes||[]).find(h=>h.id===targetHeroId);
+    state.combatActionNote = `Granted ${n} surge${n===1?'':'s'} to ${targetName ? targetName.name : 'ally'}.`;
+    renderMain();
+  },
+  async adjustMySurges(delta){
+    const c = state.current;
+    if(!c || !c.campaignId) return;
+    const data = await combatSurgeAdjustRemote(c.campaignId, c.id, delta);
+    if(!data) return;
+    state.activeCombat = data;
+    state.combatActionNote = null;
+    renderMain();
+  },
+  async spendSurgesForDamage(n){
+    const c = state.current;
+    if(!c || !c.campaignId) return;
+    const combat = state.activeCombat;
+    const current = (combat && combat.heroSurges && combat.heroSurges[c.id]) || 0;
+    const spend = Math.max(1, Math.min(3, Math.floor(Number(n)) || 1, current));
+    if(spend < 1 || spend > current) return;
+    const highest = Math.max(0, ...Object.values(c.characteristics || {}).map(v=>Number(v)||0));
+    const bonus = spend * highest;
+    const data = await combatSurgeAdjustRemote(c.campaignId, c.id, -spend);
+    if(!data) return;
+    state.activeCombat = data;
+    state.combatActionNote = `Spent ${spend} surge${spend===1?'':'s'}: +${bonus} damage to one target (${spend} × highest characteristic ${highest}).`;
+    renderMain();
+  },
+  async spendSurgesForPotency(){
+    const c = state.current;
+    if(!c || !c.campaignId) return;
+    const combat = state.activeCombat;
+    const current = (combat && combat.heroSurges && combat.heroSurges[c.id]) || 0;
+    if(current < 2) return;
+    const data = await combatSurgeAdjustRemote(c.campaignId, c.id, -2);
+    if(!data) return;
+    state.activeCombat = data;
+    state.combatActionNote = `Spent 2 surges: +1 potency for one target this use (repeat for additional targets; max +1 per target).`;
+    renderMain();
+  },
+  // Enemy targeting + damage (Combat tab). The achieved tier's damage text
+  // is only ever offered as an editable starting number (see
+  // suggestDamageFromText) -- dice-based or conditional damage can't be
+  // reduced to one number without reading the actual text, so this never
+  // auto-applies without the player seeing and confirming the amount first.
+  async applyAbilityDamage(abilityId, monsterId, amount){
+    const c = state.current;
+    if(!c || !c.campaignId || !monsterId) return;
+    const n = Math.max(0, Math.floor(Number(amount)) || 0);
+    if(n <= 0) return;
+    const data = await combatApplyDamageRemote(c.campaignId, monsterId, n);
+    if(!data) return;
+    state.activeCombat = data;
+    const target = (data.monsters||[]).find(m=>m.id===monsterId);
+    if(target){
+      state.combatActionNote = target.isMinionSquad
+        ? `Dealt ${n} damage to ${target.name}: ${minionAliveCount(target)}/${target.squadSize} alive (pool ${target.staminaCurrent}/${target.staminaMax}).`
+        : `Dealt ${n} damage to ${target.name}: ${target.staminaCurrent}/${target.staminaMax} Stamina remaining${target.staminaCurrent<=0?' -- down!':''}.`;
+    }
     renderMain();
   },
   async nextCombatRound(){
@@ -11955,6 +12139,7 @@ function renderInCombatPanel(c){
   const potency = heroPotency(c);
   const turnOpenByMe = combat.heroTurnOpen === c.id;
   const status = heroStatus(c);
+  const surges = (combat.heroSurges && combat.heroSurges[c.id]) || 0;
   return `
   <div class="kit-card in-combat-panel">
     <span class="h-label" style="color:var(--forge);">⚔ ${escapeHtml(combat.encounterName||'Combat')} — Round ${escapeHtml(combat.round||1)}</span>
@@ -11962,6 +12147,22 @@ function renderInCombatPanel(c){
     ${resourceName ? `<p class="array-hint" style="margin-top:4px;">${escapeHtml(resourceName)}: <strong style="color:var(--forge);">${resourceAmount}</strong></p>` : ''}
     ${potency ? `<p class="array-hint" style="margin-top:4px;" title="Targets resist your ability's potency if their ${escapeHtml(potency.characteristic)} score is not lower than this value.">Potency (${escapeHtml(potency.characteristic)}): <strong style="color:var(--forge);">${escapeHtml(formatPotency(potency))}</strong></p>` : ''}
     ${status ? `<p class="array-hint" style="margin-top:4px;"><span class="status-tag status-${status}">${escapeHtml(heroStatusLabel(status))}</span>${status==='dying' ? ' — you can\'t Catch Breath yourself; an ally can still help you spend a Recovery.' : ''}</p>` : ''}
+    ${state.combatActionNote ? `<p class="array-hint" style="margin-top:6px;padding:6px 10px;border-left:2px solid var(--forge);color:var(--forge);">${escapeHtml(state.combatActionNote)}</p>` : ''}
+    <div class="kit-card" style="margin-top:8px;padding:10px 12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="h-label" style="margin:0;">Surges</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button type="button" class="vc-step" onclick="app.adjustMySurges(-1)" ${surges<=0?'disabled':''}>−</button>
+          <span class="vc-value">${escapeHtml(surges)}</span>
+          <button type="button" class="vc-step" onclick="app.adjustMySurges(1)">+</button>
+        </div>
+      </div>
+      <p class="array-hint" style="margin-top:6px;">Spend up to 3 for +damage (each = your highest characteristic score) to one target, or 2 for +1 potency to one target.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+        ${[1,2,3].map(n=>`<button type="button" class="hs-edit-btn" style="margin:0;" ${surges<n?'disabled':''} onclick="app.spendSurgesForDamage(${n})">Spend ${n} → +dmg</button>`).join('')}
+        <button type="button" class="hs-edit-btn" style="margin:0;" ${surges<2?'disabled':''} onclick="app.spendSurgesForPotency()">Spend 2 → +1 potency</button>
+      </div>
+    </div>
     ${status==='dying' ? `
     <div class="kit-card" style="margin-top:8px;padding:10px 12px;background:rgba(224,82,82,0.08);border-color:var(--danger);">
       <p class="array-hint" style="margin:0;">Bleeding: take 1d6 + level damage on a main/triggered action or a Might/Agility power roll.</p>
@@ -13260,6 +13461,7 @@ function renderMonsterGroupCard(g, combat){
   const turnOpen = combat.activeMonsterGroup === g.group;
   const expanded = state.expandedMonsterGroups.has(key);
   const baseName = g.monsters[0].baseName || g.monsters[0].name;
+  const headerCount = g.monsters.reduce((n,m)=>n + (m.isMinionSquad ? minionAliveCount(m) : 1), 0);
   const turnBtn = acted
     ? `<button type="button" class="primary-btn secondary" style="margin-top:10px;" onclick="app.toggleMonsterGroupActed(${g.group})">↩ Mark not acted</button>`
     : turnOpen
@@ -13270,13 +13472,26 @@ function renderMonsterGroupCard(g, combat){
   return `
   <div class="kit-card monster-group-card ${acted?'acted':''}">
     <button type="button" class="mg-header" onclick="app.toggleMonsterGroupExpand(${g.group})">
-      <span class="mg-title">Group ${g.group} — ${escapeHtml(baseName)} ×${g.monsters.length}${acted?' <span class="mg-acted-tag">✓ acted</span>':(turnOpen?' <span class="mg-acted-tag">turn open</span>':'')}</span>
+      <span class="mg-title">Group ${g.group} — ${escapeHtml(baseName)} ×${headerCount}${acted?' <span class="mg-acted-tag">✓ acted</span>':(turnOpen?' <span class="mg-acted-tag">turn open</span>':'')}</span>
       <span class="ability-row-caret">${expanded?'▾':'▸'}</span>
     </button>
     ${expanded ? `
     <div class="mg-body">
       ${charLine ? `<p class="array-hint" style="margin:0 0 8px;">Characteristics: <strong style="color:var(--forge);">${escapeHtml(charLine)}</strong></p>` : ''}
-      ${g.monsters.map(m=>`
+      ${g.monsters.map(m=>{
+        if(m.isMinionSquad){
+          const alive = minionAliveCount(m);
+          return `
+        <div class="mg-monster-row">
+          <span class="mg-monster-name">${escapeHtml(m.name)} — ${alive}/${m.squadSize} alive${alive<=0?' <span class="mg-down-tag">wiped</span>':''}</span>
+          <div class="vc-row">
+            <button type="button" class="vc-step" title="Remove one minion's worth of Stamina from the pool" onclick="app.bumpMonsterStamina('${m.id}',-${m.perMinionStamina})">−${m.perMinionStamina}</button>
+            <span class="vc-value">${m.staminaCurrent}/${m.staminaMax} pool</span>
+            <button type="button" class="vc-step" onclick="app.bumpMonsterStamina('${m.id}',${m.perMinionStamina})">+${m.perMinionStamina}</button>
+          </div>
+        </div>`;
+        }
+        return `
         <div class="mg-monster-row">
           <span class="mg-monster-name">${escapeHtml(m.name)}${m.staminaCurrent<=0?' <span class="mg-down-tag">down</span>':''}</span>
           <div class="vc-row">
@@ -13284,8 +13499,9 @@ function renderMonsterGroupCard(g, combat){
             <span class="vc-value">${m.staminaCurrent}/${m.staminaMax}</span>
             <button type="button" class="vc-step" onclick="app.bumpMonsterStamina('${m.id}',1)">+</button>
           </div>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
+      ${g.monsters.some(m=>m.isMinionSquad) ? `<p class="array-hint" style="margin-top:6px;">Area-effect damage should only be split across minions actually caught in the area -- this app has no battle map, so use judgment on how much of an area hit lands on the squad pool.</p>` : ''}
       ${renderMonsterAbilities(baseName, combat)}
       ${renderMonsterPassives(baseName)}
       ${turnBtn}
@@ -14107,6 +14323,23 @@ function renderEffectDisplay(effect, activeTier, hideTrail){
 function abilityRowHtml(a, c){
   const expanded = state.expandedAbilityIds.has(a.id);
   const costLabel = a.cost || (a.type==='Signature Ability' ? 'Signature' : '');
+  // An ability whose parsed effect has leftover text after the tier table
+  // (the line we now hide from display, task #124) usually describes a
+  // second, separately-targetable effect -- "one ally in range picks up
+  // surges...", "one enemy is also slowed", etc. We can't reliably tell
+  // surge-granting apart from other secondary effects by text alone without
+  // guessing at phrasing across abilities we haven't all read, so this
+  // control is deliberately generic: any ally, an editable amount (defaults
+  // to the achieved tier when the trail mentions "tier", else 1), and the
+  // player decides whether it applies. Only shown live in combat, since it
+  // needs the roster + a real target.
+  const trailText = a.effect ? getEffectTrail(a.effect) : '';
+  const inCombat = combatTabVisible(c);
+  const allies = inCombat ? combatAllies(c) : [];
+  const achievedTier = state.rollResults[a.id] ? state.rollResults[a.id].tier : null;
+  const defaultGrant = (achievedTier && /tier/i.test(trailText)) ? achievedTier : 1;
+  const enemyTargets = (inCombat && state.activeCombat) ? (state.activeCombat.monsters || []) : [];
+  const damageSuggestion = achievedTier ? suggestDamageFromText(tierTextFor(a.effect, achievedTier)) : '';
   return `
   <div class="ability-row ${expanded?'expanded':''}">
     <button type="button" class="ability-row-head" onclick="app.toggleAbilityExpand('${a.id}')">
@@ -14133,6 +14366,32 @@ function abilityRowHtml(a, c){
         <div class="field"><label>Target</label><input type="text" value="${escapeAttr(a.target)}" oninput="app.updateAbility(event,'${a.id}','target')" placeholder="One creature…"></div>
       </div>
       ${a.effect ? `<div class="tier-preview">${renderEffectDisplay(a.effect, state.rollResults[a.id] ? state.rollResults[a.id].tier : null, true)}</div>` : ''}
+      ${(inCombat && trailText) ? `
+      <div class="kit-card" style="margin:10px 0;padding:10px 12px;">
+        <p class="array-hint" style="margin:0;"><em>${escapeHtml(trailText)}</em></p>
+        ${allies.length ? `
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+          <select id="ally-pick-${a.id}" class="hs-edit-btn" style="margin:0;">
+            ${allies.map(h=>`<option value="${escapeAttr(h.id)}">${escapeHtml(h.name||'Unnamed')}</option>`).join('')}
+          </select>
+          <input id="ally-amt-${a.id}" type="number" min="1" value="${escapeAttr(defaultGrant)}" style="width:56px;" title="Amount to grant">
+          <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.grantSurgeToAlly('${a.id}', document.getElementById('ally-pick-${a.id}').value, document.getElementById('ally-amt-${a.id}').value)">Grant Surge(s) to Ally</button>
+        </div>` : `<p class="array-hint" style="margin-top:6px;">No other heroes in this combat to target yet.</p>`}
+      </div>` : ''}
+      ${(inCombat && achievedTier) ? `
+      <div class="kit-card" style="margin:10px 0;padding:10px 12px;">
+        <span class="h-label" style="margin:0;">Apply to a Target</span>
+        ${enemyTargets.length ? `
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+          <select id="enemy-pick-${a.id}" class="hs-edit-btn" style="margin:0;">
+            ${enemyTargets.map(m=>`<option value="${escapeAttr(m.id)}">${escapeHtml(monsterTargetLabel(m))}</option>`).join('')}
+          </select>
+          <input id="enemy-dmg-${a.id}" type="number" min="0" value="${escapeAttr(damageSuggestion)}" style="width:64px;" placeholder="Dmg" title="Damage to subtract">
+          <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.applyAbilityDamage('${a.id}', document.getElementById('enemy-pick-${a.id}').value, document.getElementById('enemy-dmg-${a.id}').value)">Apply Damage</button>
+        </div>
+        <p class="array-hint" style="margin-top:6px;">Starting number is read from the achieved tier where it can be -- check it against the effect text above, especially for dice damage, before applying.</p>
+        ` : `<p class="array-hint" style="margin-top:6px;">No tracked enemies in this fight yet.</p>`}
+      </div>` : ''}
       <div class="field"><label>Effect${a.effect && parseTieredEffect(a.effect) ? ' (edit raw text)' : ''}</label><textarea oninput="app.updateAbility(event,'${a.id}','effect')" placeholder="Power roll, effect text, tier results…">${escapeHtml(a.effect)}</textarea></div>
       ${renderRollBlock(a, c)}
       <button type="button" class="ability-remove-btn" onclick="app.removeAbility('${a.id}')">✕ Remove Ability</button>
