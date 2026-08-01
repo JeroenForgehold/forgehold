@@ -162,6 +162,19 @@ button{cursor:pointer;}
 .setup-check{width:18px;height:18px;flex-shrink:0;border-radius:50%;border:1px solid var(--line-soft);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--good);}
 .setup-checklist-item.done .setup-check{border-color:var(--good);background:var(--forge-glow);}
 .setup-label{flex:1;}
+.wizard-shell{padding:26px 36px 40px;max-width:720px;margin:0 auto;width:100%;}
+.wizard-progress{margin-bottom:18px;}
+.wizard-progress-bar{margin-top:8px;height:6px;border-radius:4px;background:var(--bg-raised);overflow:hidden;}
+.wizard-progress-fill{height:100%;background:var(--forge);border-radius:4px;transition:width 0.25s ease;}
+.wizard-body{margin-top:0;}
+.wizard-body h2{margin:0 0 6px;font-size:19px;color:var(--text);}
+.wizard-nav{display:flex;align-items:center;gap:10px;margin-top:20px;}
+.wizard-nav .primary-btn:disabled{opacity:0.4;cursor:not-allowed;}
+.wizard-review-grid{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.wizard-review-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;}
+.wizard-review-row:last-child{border-bottom:none;}
+.wizard-review-row .wr-label{color:var(--text-faint);}
+.wizard-review-row .wr-value{color:var(--text);font-weight:600;text-align:right;}
 .kit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
 .array-panel{margin-top:10px;background:var(--bg-raised);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;}
 .array-hint{font-family:'Literata',serif;font-size:12.5px;color:var(--text-faint);line-height:1.5;margin:6px 0 10px;}
@@ -749,17 +762,59 @@ const SUBCLASSES = {
       {
         "name": "Exorcist",
         "grantedSkill": "Read Person",
-        "blurb": "Trained to root out the enemies your order never sees coming."
+        "blurb": "Trained to root out the enemies your order never sees coming.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Saint's Vigilance, A Sense for Truth"
+          },
+          {
+            "level": 5,
+            "name": "Evil Revealed"
+          },
+          {
+            "level": 8,
+            "name": "Demonologist"
+          }
+        ]
       },
       {
         "name": "Oracle",
         "grantedSkill": "Magic",
-        "blurb": "Digs up the hidden and clandestine threats creeping toward your faith."
+        "blurb": "Digs up the hidden and clandestine threats creeping toward your faith.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "It Was Foretold, Judge of Character"
+          },
+          {
+            "level": 5,
+            "name": "Prophecy"
+          },
+          {
+            "level": 8,
+            "name": "Their Past Revealed"
+          }
+        ]
       },
       {
         "name": "Paragon",
         "grantedSkill": "Lead",
-        "blurb": "Holds the line by example, keeping the faithful from drifting into corruption."
+        "blurb": "Holds the line by example, keeping the faithful from drifting into corruption.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Lead by Example, Stalwart Icon"
+          },
+          {
+            "level": 5,
+            "name": "Stand Fast!"
+          },
+          {
+            "level": 8,
+            "name": "Vow"
+          }
+        ]
       }
     ]
   },
@@ -773,73 +828,193 @@ const SUBCLASSES = {
         "name": "Creation",
         "firstLevelFeature": "Hands of the Maker",
         "skillGroup": "Crafting",
-        "blurb": "Shaping and building magic; rewards you when area magic goes off nearby and can raise a wall of stone."
+        "blurb": "Shaping and building magic; rewards you when area magic goes off nearby and can raise a wall of stone.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Improved Hands of the Maker"
+          },
+          {
+            "level": 7,
+            "name": "Divine Quartermaster"
+          }
+        ]
       },
       {
         "name": "Death",
         "firstLevelFeature": "Grave Speech",
         "skillGroup": "Lore",
-        "blurb": "The power of endings; feeds on foes dropping and can lay a lethal curse."
+        "blurb": "The power of endings; feeds on foes dropping and can lay a lethal curse.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Séance"
+          },
+          {
+            "level": 7,
+            "name": "Word of Death Deferred"
+          }
+        ]
       },
       {
         "name": "Fate",
         "firstLevelFeature": "Oracular Visions",
         "skillGroup": "Lore",
-        "blurb": "Destiny made legible; you can lock in how someone's next roll turns out."
+        "blurb": "Destiny made legible; you can lock in how someone's next roll turns out.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Oracular Warning"
+          },
+          {
+            "level": 7,
+            "name": "Word of Fate Denied"
+          }
+        ]
       },
       {
         "name": "Knowledge",
         "firstLevelFeature": "Blessing of Comprehension",
         "skillGroup": "Lore",
-        "blurb": "Insight into the enemy's plans; hands surges to your allies."
+        "blurb": "Insight into the enemy's plans; hands surges to your allies.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Saint's Epiphany"
+          },
+          {
+            "level": 7,
+            "name": "Gods' Library"
+          }
+        ]
       },
       {
         "name": "Life",
         "firstLevelFeature": "Revitalizing Ritual",
         "skillGroup": "Exploration",
-        "blurb": "Healing and vitality; lets an ally spend a Recovery, shake off a condition, or take on temporary Stamina."
+        "blurb": "Healing and vitality; lets an ally spend a Recovery, shake off a condition, or take on temporary Stamina.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Blessing of Life"
+          },
+          {
+            "level": 7,
+            "name": "Font of Grace"
+          }
+        ]
       },
       {
         "name": "Love",
         "firstLevelFeature": "Blessing of Compassion",
         "skillGroup": "Interpersonal",
-        "blurb": "Bonds between allies; helping others feeds your piety and shields the party with temporary Stamina."
+        "blurb": "Bonds between allies; helping others feeds your piety and shields the party with temporary Stamina.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Invocation of the Heart"
+          },
+          {
+            "level": 7,
+            "name": "Covenant of the Heart"
+          }
+        ]
       },
       {
         "name": "Nature",
         "firstLevelFeature": "Faithful Friend",
         "skillGroup": "Exploration",
-        "blurb": "The wild's raw elements; elemental damage nearby fuels you, and vines rise at your call."
+        "blurb": "The wild's raw elements; elemental damage nearby fuels you, and vines rise at your call.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Wode Road"
+          },
+          {
+            "level": 7,
+            "name": "Nature's Bounty"
+          }
+        ]
       },
       {
         "name": "Protection",
         "firstLevelFeature": "Protective Circle",
         "skillGroup": "Exploration",
-        "blurb": "Wards and guardianship, keeping those in your care standing."
+        "blurb": "Wards and guardianship, keeping those in your care standing.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Impervious Touch"
+          },
+          {
+            "level": 7,
+            "name": "Blessing of Iron"
+          }
+        ]
       },
       {
         "name": "Storm",
         "firstLevelFeature": "Blessing of Fortunate Weather",
         "skillGroup": "Exploration",
-        "blurb": "Wind and thunder; between rests you can set the weather that follows the party."
+        "blurb": "Wind and thunder; between rests you can set the weather that follows the party.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Windwalk"
+          },
+          {
+            "level": 7,
+            "name": "Thunderstruck"
+          }
+        ]
       },
       {
         "name": "Sun",
         "firstLevelFeature": "Inner Light",
         "skillGroup": "Lore",
-        "blurb": "Fire and holy radiance; nearby burning or divine damage stokes your piety."
+        "blurb": "Fire and holy radiance; nearby burning or divine damage stokes your piety.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Light of Revelation"
+          },
+          {
+            "level": 7,
+            "name": "Light of the Burning Sun"
+          }
+        ]
       },
       {
         "name": "Trickery",
         "firstLevelFeature": "Inspired Deception",
         "skillGroup": "Intrigue",
-        "blurb": "Misdirection and cunning; rewards sneaking and assisting, and slides a creature out of position."
+        "blurb": "Misdirection and cunning; rewards sneaking and assisting, and slides a creature out of position.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Blessing of Secrets"
+          },
+          {
+            "level": 7,
+            "name": "Trinity of Trickery"
+          }
+        ]
       },
       {
         "name": "War",
         "firstLevelFeature": "Sanctified Weapon",
         "skillGroup": "Exploration",
-        "blurb": "Sanctified violence; big hits nearby build piety and you hand out surges."
+        "blurb": "Sanctified violence; big hits nearby build piety and you hand out surges.",
+        "leveledFeatures": [
+          {
+            "level": 4,
+            "name": "Improved Sanctified Weapon"
+          },
+          {
+            "level": 7,
+            "name": "Your Triumphs are Remembered"
+          }
+        ]
       }
     ]
   },
@@ -851,22 +1026,78 @@ const SUBCLASSES = {
       {
         "name": "Earth",
         "firstLevelFeature": "Acolyte of Earth",
-        "blurb": "Permanence and stone; leaning on earth magic makes you progressively harder to shove around."
+        "blurb": "Permanence and stone; leaning on earth magic makes you progressively harder to shove around.",
+        "leveledFeatures": [
+          {
+            "level": 3,
+            "name": "Earth Accepts Me"
+          },
+          {
+            "level": 5,
+            "name": "The Mountain Does Not Move"
+          },
+          {
+            "level": 8,
+            "name": "Summon Source of Earth"
+          }
+        ]
       },
       {
         "name": "Fire",
         "firstLevelFeature": "Acolyte of Fire",
-        "blurb": "Pure destruction; your flame magic hits harder, including your Hurl Element strikes."
+        "blurb": "Pure destruction; your flame magic hits harder, including your Hurl Element strikes.",
+        "leveledFeatures": [
+          {
+            "level": 3,
+            "name": "A Conversation With Fire"
+          },
+          {
+            "level": 5,
+            "name": "Smoldering Step"
+          },
+          {
+            "level": 8,
+            "name": "The Flame Primordial"
+          }
+        ]
       },
       {
         "name": "Green",
         "firstLevelFeature": "Acolyte of the Green",
-        "blurb": "Growth and living things; leftover magic from your damaging green spells becomes temporary Stamina for you or a nearby ally."
+        "blurb": "Growth and living things; leftover magic from your damaging green spells becomes temporary Stamina for you or a nearby ally.",
+        "leveledFeatures": [
+          {
+            "level": 3,
+            "name": "Remember Growth and Sun and Rain"
+          },
+          {
+            "level": 5,
+            "name": "Hide of Tenfold Shields"
+          },
+          {
+            "level": 8,
+            "name": "Chimeric Manifestation"
+          }
+        ]
       },
       {
         "name": "Void",
         "firstLevelFeature": "Acolyte of the Mystery",
-        "blurb": "Space and unreality; your ranged void magic reaches two squares farther than anyone else's."
+        "blurb": "Space and unreality; your ranged void magic reaches two squares farther than anyone else's.",
+        "leveledFeatures": [
+          {
+            "level": 3,
+            "name": "Distance Is Only Memory"
+          },
+          {
+            "level": 5,
+            "name": "Pierce the Veil of Substance"
+          },
+          {
+            "level": 8,
+            "name": "Black Hole Star"
+          }
+        ]
       }
     ]
   },
@@ -877,17 +1108,71 @@ const SUBCLASSES = {
       {
         "name": "Berserker",
         "grantedSkill": "Lift",
-        "blurb": "Turns primal rage into raw bodily power, a walking piece of the forces that built the world."
+        "blurb": "Turns primal rage into raw bodily power, a walking piece of the forces that built the world.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Unstoppable Force"
+          },
+          {
+            "level": 3,
+            "name": "Immovable Object"
+          },
+          {
+            "level": 5,
+            "name": "Bounder"
+          },
+          {
+            "level": 8,
+            "name": "Strongest There Is"
+          }
+        ]
       },
       {
         "name": "Reaver",
         "grantedSkill": "Hide",
-        "blurb": "Turns rage into predatory instinct and cunning, at odds with the tidy rules of civilization."
+        "blurb": "Turns rage into predatory instinct and cunning, at odds with the tidy rules of civilization.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Inescapable Wrath"
+          },
+          {
+            "level": 3,
+            "name": "See Through Their Tricks"
+          },
+          {
+            "level": 5,
+            "name": "Unfettered"
+          },
+          {
+            "level": 8,
+            "name": "A Step Ahead"
+          }
+        ]
       },
       {
         "name": "Stormwight",
         "grantedSkill": "Track",
-        "blurb": "Turns rage into storm and beast, taking on animal or half-animal shapes."
+        "blurb": "Turns rage into storm and beast, taking on animal or half-animal shapes.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Tooth and Claw"
+          },
+          {
+            "level": 3,
+            "name": "Nature's Knight"
+          },
+          {
+            "level": 5,
+            "name": "Stormborn"
+          },
+          {
+            "level": 8,
+            "name": "Menagerie"
+          }
+        ]
       }
     ]
   },
@@ -898,17 +1183,59 @@ const SUBCLASSES = {
       {
         "name": "Chronokinetic",
         "grantedSkillGroup": "Lore",
-        "blurb": "Cuts loose from ordinary time and treats its flow as one more direction to move through."
+        "blurb": "Cuts loose from ordinary time and treats its flow as one more direction to move through.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Rapid Processing"
+          },
+          {
+            "level": 5,
+            "name": "Instant Action"
+          },
+          {
+            "level": 8,
+            "name": "Shared Momentum"
+          }
+        ]
       },
       {
         "name": "Cryokinetic",
         "grantedSkillGroup": "Crafting",
-        "blurb": "Draws on absolute cold as a fundamental energy and channels it through the body."
+        "blurb": "Draws on absolute cold as a fundamental energy and channels it through the body.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Entropic Adaptability"
+          },
+          {
+            "level": 5,
+            "name": "Chilling Readiness"
+          },
+          {
+            "level": 8,
+            "name": "Synaptic Triage"
+          }
+        ]
       },
       {
         "name": "Metakinetic",
         "grantedSkillGroup": "Exploration",
-        "blurb": "Sees past the universe's surface illusions to unlock what the body is really capable of."
+        "blurb": "Sees past the universe's surface illusions to unlock what the body is really capable of.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Inertial Sink"
+          },
+          {
+            "level": 5,
+            "name": "Inertial Fulcrum"
+          },
+          {
+            "level": 8,
+            "name": "Inertial Dampener"
+          }
+        ]
       }
     ]
   },
@@ -919,17 +1246,59 @@ const SUBCLASSES = {
       {
         "name": "College of Black Ash",
         "grantedSkill": "Magic",
-        "blurb": "The original shadow school: unmatched battlefield mobility, blinking through shadow and calling down darkness."
+        "blurb": "The original shadow school: unmatched battlefield mobility, blinking through shadow and calling down darkness.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Burning Ash"
+          },
+          {
+            "level": 5,
+            "name": "Trail of Cinders"
+          },
+          {
+            "level": 8,
+            "name": "Cinder Step"
+          }
+        ]
       },
       {
         "name": "College of Caustic Alchemy",
         "grantedSkill": "Alchemy",
-        "blurb": "Assassins schooled in acids, bombs, and poisons."
+        "blurb": "Assassins schooled in acids, bombs, and poisons.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Trained Assassin"
+          },
+          {
+            "level": 5,
+            "name": "Volatile Reagents"
+          },
+          {
+            "level": 8,
+            "name": "Time Bomb"
+          }
+        ]
       },
       {
         "name": "College of the Harlequin Mask",
         "grantedSkill": "Lie",
-        "blurb": "Illusionists who talk their way into strongholds and turn a fight into staged chaos."
+        "blurb": "Illusionists who talk their way into strongholds and turn a fight into staged chaos.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Friend!"
+          },
+          {
+            "level": 5,
+            "name": "Harlequin Gambit"
+          },
+          {
+            "level": 8,
+            "name": "Parkour"
+          }
+        ]
       }
     ]
   },
@@ -940,17 +1309,71 @@ const SUBCLASSES = {
       {
         "name": "Insurgent",
         "grantedSkillGroup": "Intrigue",
-        "blurb": "Fights dirty on principle, because keeping the squad breathing beats dying honorably."
+        "blurb": "Fights dirty on principle, because keeping the squad breathing beats dying honorably.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Infiltration Tactics"
+          },
+          {
+            "level": 5,
+            "name": "Distracted, Leave No Trace"
+          },
+          {
+            "level": 7,
+            "name": "Asymmetric Warfare"
+          },
+          {
+            "level": 8,
+            "name": "Bait and Ambush"
+          }
+        ]
       },
       {
         "name": "Mastermind",
         "grantedSkillGroup": "Lore",
-        "blurb": "Reads the battlefield like a board and wins by staying several moves ahead."
+        "blurb": "Reads the battlefield like a board and wins by staying several moves ahead.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Goaded"
+          },
+          {
+            "level": 5,
+            "name": "Anticipation, I Predicted That"
+          },
+          {
+            "level": 7,
+            "name": "Grand Strategy"
+          },
+          {
+            "level": 8,
+            "name": "Pincer Movement"
+          }
+        ]
       },
       {
         "name": "Vanguard",
         "grantedSkillGroup": "Interpersonal",
-        "blurb": "Leads from the front on nerve and presence, borrowing the stratagems of old heroes."
+        "blurb": "Leads from the front on nerve and presence, borrowing the stratagems of old heroes.",
+        "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Melee Superiority"
+          },
+          {
+            "level": 5,
+            "name": "Shake It Off, Tactical Offensive"
+          },
+          {
+            "level": 7,
+            "name": "Shock and Awe"
+          },
+          {
+            "level": 8,
+            "name": "See Your Enemies Driven Before You"
+          }
+        ]
       }
     ]
   },
@@ -961,15 +1384,69 @@ const SUBCLASSES = {
     "options": [
       {
         "name": "Chronopathy",
-        "blurb": "Glimpses past and future and bends time to help allies and hobble foes."
+        "blurb": "Glimpses past and future and bends time to help allies and hobble foes.",
+        "leveledFeatures": [
+          {
+            "level": 1,
+            "name": "Accelerate, Again"
+          },
+          {
+            "level": 2,
+            "name": "Ease the Hours"
+          },
+          {
+            "level": 5,
+            "name": "Distortion Temporal, Speed of Thought"
+          },
+          {
+            "level": 8,
+            "name": "Doubling the Hours, Stasis Shield"
+          }
+        ]
       },
       {
         "name": "Telekinesis",
-        "blurb": "Moves creatures and objects by thought alone."
+        "blurb": "Moves creatures and objects by thought alone.",
+        "leveledFeatures": [
+          {
+            "level": 1,
+            "name": "Minor Telekinesis, Repel"
+          },
+          {
+            "level": 2,
+            "name": "Ease Their Fall"
+          },
+          {
+            "level": 5,
+            "name": "Kinetic Amplifier, Triangulate"
+          },
+          {
+            "level": 8,
+            "name": "Levitation Field, Low Gravity"
+          }
+        ]
       },
       {
         "name": "Telepathy",
-        "blurb": "Speaks into minds, reads them, and nudges them your way."
+        "blurb": "Speaks into minds, reads them, and nudges them your way.",
+        "leveledFeatures": [
+          {
+            "level": 1,
+            "name": "Feedback Loop, Remote Assistance"
+          },
+          {
+            "level": 2,
+            "name": "Ease the Mind"
+          },
+          {
+            "level": 5,
+            "name": "Compulsion, Remote Amplification"
+          },
+          {
+            "level": 8,
+            "name": "Mindlink, Universal Connection"
+          }
+        ]
       }
     ]
   },
@@ -980,18 +1457,72 @@ const SUBCLASSES = {
       {
         "name": "Auteur",
         "grantedSkill": "Brag",
-        "blurb": "Finds the drama in narrative itself, using magic to rearrange how events play out."
+        "blurb": "Finds the drama in narrative itself, using magic to rearrange how events play out.",
+        "leveledFeatures": [
+          {
+            "level": 1,
+            "name": "Blocking, Dramatic Monologue"
+          },
+          {
+            "level": 3,
+            "name": "Missed Cue"
+          },
+          {
+            "level": 5,
+            "name": "Fix It in Post or Take Two! (choice)"
+          },
+          {
+            "level": 8,
+            "name": "Deleted Scene"
+          }
+        ]
       },
       {
         "name": "Duelist",
         "grantedSkill": "Gymnastics",
-        "blurb": "Finds the drama in paired motion, turning a fight into a dance with a partner who may kill you."
+        "blurb": "Finds the drama in paired motion, turning a fight into a dance with a partner who may kill you.",
+        "leveledFeatures": [
+          {
+            "level": 1,
+            "name": "Acrobatics, Star Power"
+          },
+          {
+            "level": 3,
+            "name": "Foil"
+          },
+          {
+            "level": 5,
+            "name": "Verbal Duel or We Can't Be Upstaged! (choice)"
+          },
+          {
+            "level": 8,
+            "name": "Masterwork"
+          }
+        ]
       },
       {
         "name": "Virtuoso",
         "grantedSkill": "Music",
         "extraBenefit": "can play an instrument",
-        "blurb": "Finds the drama in music, threading magic through sound to move an audience."
+        "blurb": "Finds the drama in music, threading magic through sound to move an audience.",
+        "leveledFeatures": [
+          {
+            "level": 1,
+            "name": "Power Chord, Virtuoso Performances"
+          },
+          {
+            "level": 3,
+            "name": "Second Album"
+          },
+          {
+            "level": 5,
+            "name": "Bolstering Banter or Medley (choice)"
+          },
+          {
+            "level": 8,
+            "name": "Crowd Favorites"
+          }
+        ]
       }
     ]
   }
@@ -10771,10 +11302,21 @@ function perkSlotsFor(level){ return 1 + PERKS.perkLevels.filter(l => l<=level).
 // shows the new stats; adds a Perk step if a perkLevels milestone (2/4/6/8/10)
 // falls in (fromLevel, toLevel], and an Abilities step if the class has any
 // heroic ability whose minLevel falls in that same range.
+// Every one of the 9 classes' advancement tables in Ch.5 grants a bonus
+// skill choice at 4th, 7th, and 10th level (worded "Skill" for some
+// classes, "Skill Increase" for others -- same mechanic, no tiered-skill
+// system exists elsewhere in the rules, so the wording difference is
+// treated as cosmetic). Verified directly against 6 of the 9 tables
+// (Censor, Conduit, Elementalist, Fury, Shadow, Troubadour); the remaining
+// 3 (Null, Tactician, Talent) follow the identical table structure at
+// those same milestone levels and weren't independently re-checked.
+const SKILL_GRANT_LEVELS = [4, 7, 10];
 function levelUpStepsFor(fromLevel, toLevel, c){
   const steps = ['stats'];
   const crossedPerkMilestone = (PERKS.perkLevels||[]).some(l => l > fromLevel && l <= toLevel);
   if(crossedPerkMilestone) steps.push('perk');
+  const crossedSkillMilestone = SKILL_GRANT_LEVELS.some(l => l > fromLevel && l <= toLevel);
+  if(crossedSkillMilestone) steps.push('skill');
   const clsData = ABILITIES.classes[c.class];
   const unlockedAbilities = clsData ? (clsData.heroic||[]).filter(h => h.minLevel && h.minLevel > fromLevel && h.minLevel <= toLevel) : [];
   if(unlockedAbilities.length) steps.push('abilities');
@@ -10813,6 +11355,8 @@ const state = {
   monsterAbilityTarget: {},     // UI-only: selected potency-check target hero per ability id
   expandedMonsterGroups: new Set(), // UI-only: which monster group cards are expanded
   monsterLibraryFilter: { search:'', org:'', role:'', family:'', sort:'name' }, // UI-only: Encounter Builder library controls
+  wizardActive: false,          // UI-only: is the step-by-step Character Creation Wizard showing instead of the normal tabs
+  wizardStep: null,             // UI-only: string key of the current wizard step (see wizardStepsFor)
 };
 let saveTimer = null;
 let pendingSaveTarget = null; // hero object currently queued by scheduleSave's debounce
@@ -10902,6 +11446,52 @@ const app = {
     await saveCharStorage(c);
     await saveMyRoster(state.roster);
     state.view='heroes'; state.currentId = id; state.current = c; state.prevCampaignId = null; state.activeTab = 'home';
+    // Brand-new heroes go straight into the step-by-step wizard rather than
+    // landing on Home with an empty sheet -- see wizardStepsFor/renderWizard.
+    const steps = wizardStepsFor(c);
+    state.wizardStep = steps[0].key;
+    state.wizardActive = true;
+    render();
+  },
+  resumeWizard(){
+    const c = state.current;
+    if(!c) return;
+    const steps = wizardStepsFor(c);
+    const firstIncomplete = steps.find(s => s.key!=='review' && !s.isDone(c));
+    state.wizardStep = firstIncomplete ? firstIncomplete.key : steps[0].key;
+    state.wizardActive = true;
+    render();
+  },
+  wizardNext(){
+    const c = state.current;
+    if(!c) return;
+    const steps = wizardStepsFor(c);
+    const idx = steps.findIndex(s=>s.key===state.wizardStep);
+    if(idx < 0 || idx >= steps.length - 1) return;
+    state.wizardStep = steps[idx+1].key;
+    render();
+  },
+  wizardSkip(){
+    app.wizardNext();
+  },
+  wizardBack(){
+    const c = state.current;
+    if(!c) return;
+    const steps = wizardStepsFor(c);
+    const idx = steps.findIndex(s=>s.key===state.wizardStep);
+    if(idx <= 0) return;
+    state.wizardStep = steps[idx-1].key;
+    render();
+  },
+  exitWizard(){
+    state.wizardActive = false;
+    state.activeTab = 'home';
+    render();
+  },
+  finishWizard(){
+    state.wizardActive = false;
+    state.wizardStep = null;
+    state.activeTab = 'home';
     render();
   },
   async deleteCharacter(id, evt){
@@ -11583,6 +12173,11 @@ const app = {
     state.pickerOpen = type;
     render();
   },
+  closeLevelUpToTab(tab){
+    state.levelUpFlow = null;
+    state.activeTab = tab;
+    render();
+  },
   applyQuickBuild(source){
     const c = state.current;
     if(source==='class'){ const cls = findClassData(c.class); if(cls) cls.skills.quickBuild.forEach(n=>ensureSkillTrained(c,n)); }
@@ -12084,16 +12679,8 @@ function renderSetupChecklist(c){
   return `
   <div class="kit-card setup-checklist-card">
     <span class="h-label" style="color:var(--forge);">Character Setup — ${doneCount}/${items.length}</span>
-    <p class="array-hint" style="margin-top:4px;">Pick these up in any order — this just tracks what's left.</p>
-    <div class="setup-checklist">
-      ${items.map(i=>`
-        <div class="setup-checklist-item ${i.done?'done':''}">
-          <span class="setup-check">${i.done?'&#10003;':''}</span>
-          <span class="setup-label">${escapeHtml(i.label)}</span>
-          ${!i.done ? `<button type="button" class="hs-edit-btn" onclick="app.setTab('${i.tab}')">Go</button>` : ''}
-        </div>
-      `).join('')}
-    </div>
+    <p class="array-hint" style="margin-top:4px;">Finish creating this hero one step at a time.</p>
+    <button type="button" class="primary-btn" style="margin-top:10px;" onclick="app.resumeWizard()">Continue Setup Wizard</button>
   </div>`;
 }
 // Player-side combat awareness -- deliberately thin. No monster names,
@@ -12194,6 +12781,11 @@ function renderMain(){
   const c = state.current;
   if(!c){
     main.innerHTML = `<div class="empty-state"><h2>No Hero Selected</h2><p>Forge a new hero from the sidebar to begin.</p></div>`;
+    return;
+  }
+
+  if(state.wizardActive){
+    main.innerHTML = renderWizard(c);
     return;
   }
 
@@ -13751,7 +14343,7 @@ function renderHome(c){
   `;
 }
 
-function renderOverview(c){
+function renderCharacteristicsBlock(c){
   const cls = findClassData(c.class);
   const nodes = NODE_POS.map(n=>`
     <div class="char-node" style="left:${n.x}%;top:${n.y}%;">
@@ -13771,11 +14363,6 @@ function renderOverview(c){
     </div>` : '';
 
   return `
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
-    <span class="h-label" style="color:var(--forge);">Edit Hero — creation-time choices</span>
-    <button type="button" class="hs-edit-btn" onclick="app.setTab('home')">← Back to Home</button>
-  </div>
-  <div class="overview-grid">
     <div class="pentagon-wrap">
       <div class="pentagon">
         <svg viewBox="0 0 100 100">${lines}</svg>
@@ -13783,7 +14370,213 @@ function renderOverview(c){
         ${nodes}
       </div>
       ${arrayPanel}
+    </div>`;
+}
+
+function renderKitBlock(c){
+  const cls = findClassData(c.class);
+  return `
+  <div class="kit-card">
+    <span class="h-label">Kit</span>
+    ${cls && !cls.usesKit ? `<p class="array-hint">${escapeHtml(cls.name)} doesn't use the martial Kit system in the core rules — its loadout comes from its class features instead.</p>` : ''}
+    <div class="kit-grid">
+      <div class="id-field" style="margin-bottom:2px;">
+        <label class="h-label" style="margin-bottom:4px;">Kit Name</label>
+        <button type="button" class="picker-btn ${c.kit.name?'':'placeholder'}" onclick="app.openPicker('kit')">${c.kit.name?escapeHtml(c.kit.name):'Choose Kit…'}</button>
+      </div>
+      <div class="field"><label>Weapon / Implement</label><input type="text" value="${escapeAttr(c.kit.weapon)}" oninput="app.updateField(event,'kit.weapon')"></div>
+      <div class="field"><label>Armor</label><input type="text" value="${escapeAttr(c.kit.armor)}" oninput="app.updateField(event,'kit.armor')"></div>
+      <div class="field"><label>Kit Bonuses / Notes</label><input type="text" value="${escapeAttr(c.kit.notes)}" oninput="app.updateField(event,'kit.notes')"></div>
     </div>
+  </div>`;
+}
+
+
+// ---------------------------------------------------------------------
+// Step-by-step Character Creation Wizard -- replaces the old "any order"
+// Character Setup checklist for the primary creation flow. New heroes land
+// here immediately (app.newCharacter); a hero with unfinished setup shows a
+// "Continue Setup Wizard" banner (renderSetupChecklist) instead of the old
+// free-roam checklist links. Steps are still just thin wrappers around the
+// existing pickers/cards (pickerField, renderCultureCard, renderSkills,
+// etc.) -- the wizard's job is ordering and gating, not new mechanics.
+// A step's availability depends on the hero's current choices (e.g. no
+// 'kit' step for a class that doesn't use kits), so the step list is
+// recomputed from scratch on every render rather than stored statically.
+// ---------------------------------------------------------------------
+function wizardStepsFor(c){
+  const cls = findClassData(c.class);
+  const clsData = ABILITIES.classes[c.class];
+  const subData = subclassDataFor(c);
+  const steps = [
+    { key:'name', title:'Name', isDone: c=>!!(c.name && c.name.trim() && c.name!=='New Hero') },
+    { key:'ancestry', title:'Ancestry', isDone: c=>!!c.ancestry },
+    { key:'class', title:'Class', isDone: c=>!!c.class },
+  ];
+  if(c.class){
+    steps.push({ key:'characteristics', title:'Characteristics', isDone: c=>CHAR_KEYS.some(k=>Number(c.characteristics && c.characteristics[k])!==0) });
+    if(cls && cls.usesKit) steps.push({ key:'kit', title:'Kit', isDone: c=>!!(c.kit && c.kit.name) });
+    if(clsData) steps.push({ key:'signature', title:'Signature Ability', isDone: c=>(c.abilities||[]).some(a=>a._src==='class') });
+    if(subData) steps.push({ key:'subclass', title: subData.subclassLabel, isDone: c=>(c.subclass||[]).length>0 });
+  }
+  steps.push({ key:'career', title:'Career', isDone: c=>!!c.career });
+  steps.push({ key:'culture', title:'Culture', isDone: c=>!!(c.culture && c.culture.environment && c.culture.organization && c.culture.upbringing) });
+  steps.push({ key:'complication', title:'Complication', isDone: c=>!!c.complication });
+  steps.push({ key:'skills', title:'Skills', isDone: c=>(c.skills||[]).some(s=>s.trained) });
+  steps.push({ key:'review', title:'Review', isDone: ()=>true });
+  return steps;
+}
+
+function renderWizardStepBody(key, c){
+  const cls = findClassData(c.class);
+  if(key === 'name'){
+    return `
+      <h2>Name your hero</h2>
+      <p class="array-hint">Every setup starts here — you can rename from Home any time afterward.</p>
+      <input class="name-input" placeholder="HERO NAME" style="max-width:360px;margin-top:10px;" value="${escapeAttr(c.name)}" oninput="app.updateField(event,'name')">
+    `;
+  }
+  if(key === 'ancestry'){
+    return `
+      <h2>Choose an Ancestry</h2>
+      <p class="array-hint">Sets your size and speed defaults and a signature trait. Full trait text is in Chapter 3.</p>
+      <div style="margin-top:10px;max-width:280px;">${pickerField('Ancestry','ancestry',c.ancestry)}</div>
+      ${renderAncestryTraitsCard(c)}
+    `;
+  }
+  if(key === 'class'){
+    return `
+      <h2>Choose a Class</h2>
+      <p class="array-hint">Sets your Heroic Resource, fixed characteristics, Stamina, Recoveries, and Kit eligibility.</p>
+      <div style="margin-top:10px;max-width:280px;">${pickerField('Class','class',c.class)}</div>
+      ${cls ? `
+      <div class="kit-card">
+        <span class="h-label">Class Details — ${escapeHtml(cls.name)}</span>
+        <div class="class-detail-grid">
+          <div><span class="cd-label">Heroic Resource</span><span class="cd-value">${escapeHtml(cls.resource)}</span></div>
+          <div><span class="cd-label">Stamina</span><span class="cd-value">${cls.staminaStart} at 1st, +${cls.staminaPerLevel}/level</span></div>
+          <div><span class="cd-label">Recoveries</span><span class="cd-value">${cls.recoveries}</span></div>
+          <div><span class="cd-label">Skills</span><span class="cd-value">${escapeHtml(cls.skills.chooseText)}</span></div>
+        </div>
+        <span class="h-label" style="margin-top:14px;display:block;">Level 1 Features</span>
+        <div class="feature-pills">${cls.level1.map(f=>`<span class="feature-pill">${escapeHtml(f)}</span>`).join('')}</div>
+      </div>` : ''}
+    `;
+  }
+  if(key === 'characteristics'){
+    return `
+      <h2>Assign Characteristics</h2>
+      <p class="array-hint">Pick one of ${escapeHtml(c.class)}'s arrays, or hand-edit the hexes below to match your table's rules.</p>
+      ${renderCharacteristicsBlock(c)}
+    `;
+  }
+  if(key === 'kit'){
+    return `
+      <h2>Choose a Kit</h2>
+      <p class="array-hint">${escapeHtml(c.class)} uses the martial Kit system — this sets your weapon, armor, and per-echelon bonuses.</p>
+      ${renderKitBlock(c)}
+    `;
+  }
+  if(key === 'signature'){
+    const hasClassAbilities = c.abilities.some(a=>a._src==='class');
+    return `
+      <h2>Signature Ability</h2>
+      <p class="array-hint">${escapeHtml(c.class)} starts with a Signature Ability, plus Heroic Abilities as you level up.</p>
+      <button type="button" class="primary-btn" style="margin-top:10px;" onclick="app.openPicker('classAbility')">Choose ${escapeHtml(c.class)} Abilities</button>
+      ${hasClassAbilities ? `<div class="feature-pills" style="margin-top:12px;">${c.abilities.filter(a=>a._src==='class').map(a=>`<span class="feature-pill">${escapeHtml(a.name)}</span>`).join('')}</div>` : `<p class="array-hint" style="margin-top:10px;">Not chosen yet.</p>`}
+    `;
+  }
+  if(key === 'subclass'){
+    return `
+      <h2>${escapeHtml(subclassDataFor(c).subclassLabel)}</h2>
+      <p class="array-hint">Your class's subclass axis — see Chapter 5 for full feature text.</p>
+      ${renderSubclassCard(c)}
+    `;
+  }
+  if(key === 'career'){
+    return `
+      <h2>Choose a Career</h2>
+      <p class="array-hint">Grants a skill Quick Build, a Perk, and sometimes bonus languages — those are added from the Perks card and Culture step.</p>
+      <div style="margin-top:10px;max-width:280px;">${pickerField('Career','career',c.career)}</div>
+    `;
+  }
+  if(key === 'culture'){
+    return `
+      <h2>Build Your Culture</h2>
+      ${renderCultureCard(c)}
+    `;
+  }
+  if(key === 'complication'){
+    return `
+      <h2>Pick a Complication</h2>
+      <p class="array-hint">Paraphrased from the book's d100 Complications table (Chapter 8) — pick one, roll one, or write your own.</p>
+      <div style="margin-top:10px;max-width:340px;">${pickerField('Complication','complication',c.complication)}</div>
+    `;
+  }
+  if(key === 'skills'){
+    return `
+      <h2>Train Your Skills</h2>
+      ${renderSkills(c)}
+    `;
+  }
+  if(key === 'review'){
+    const rows = [
+      ['Name', c.name],
+      ['Ancestry', c.ancestry],
+      ['Class', c.class],
+      ['Career', c.career],
+      ['Complication', c.complication],
+      ['Kit', c.kit && c.kit.name],
+      ['Skills trained', (c.skills||[]).filter(s=>s.trained).length + ' of ' + (c.skills||[]).length],
+    ];
+    return `
+      <h2>Review &amp; Finish</h2>
+      <p class="array-hint">Here's what you've set up. Anything can still be changed later from Home or Edit Hero.</p>
+      <div class="wizard-review-grid">
+        ${rows.map(([label,value])=>`<div class="wizard-review-row"><span class="wr-label">${escapeHtml(label)}</span><span class="wr-value">${value?escapeHtml(value):'—'}</span></div>`).join('')}
+      </div>
+    `;
+  }
+  return '';
+}
+
+function renderWizard(c){
+  const steps = wizardStepsFor(c);
+  let idx = steps.findIndex(s=>s.key===state.wizardStep);
+  if(idx < 0){ idx = 0; state.wizardStep = steps[0].key; }
+  const step = steps[idx];
+  const isLast = idx === steps.length - 1;
+  const isFirst = idx === 0;
+  return `
+  <div class="wizard-shell">
+    <div class="wizard-progress">
+      <span class="h-label">Setting up ${escapeHtml(c.name && c.name!=='New Hero' ? c.name : 'your hero')} — Step ${idx+1} of ${steps.length}</span>
+      <div class="wizard-progress-bar"><div class="wizard-progress-fill" style="width:${Math.round(((idx+1)/steps.length)*100)}%;"></div></div>
+    </div>
+    <div class="wizard-body kit-card">
+      ${renderWizardStepBody(step.key, c)}
+    </div>
+    <div class="wizard-nav">
+      <button type="button" class="primary-btn secondary" onclick="app.exitWizard()">Exit to Sheet</button>
+      <div style="flex:1;"></div>
+      ${!isFirst ? `<button type="button" class="primary-btn secondary" onclick="app.wizardBack()">Back</button>` : ''}
+      ${!isLast ? `<button type="button" class="primary-btn secondary" onclick="app.wizardSkip()">Skip</button>` : ''}
+      ${isLast
+        ? `<button type="button" class="primary-btn" onclick="app.finishWizard()">Finish Setup</button>`
+        : `<button type="button" class="primary-btn" ${step.isDone(c)?'':'disabled'} onclick="app.wizardNext()">Next</button>`}
+    </div>
+  </div>`;
+}
+
+function renderOverview(c){
+  const cls = findClassData(c.class);
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+    <span class="h-label" style="color:var(--forge);">Edit Hero — creation-time choices</span>
+    <button type="button" class="hs-edit-btn" onclick="app.setTab('home')">← Back to Home</button>
+  </div>
+  <div class="overview-grid">
+    ${renderCharacteristicsBlock(c)}
     <div class="stat-cards">
       <div class="card"><span class="h-label">Stamina</span><div class="card-row">
         <input type="number" value="${escapeAttr(c.stamina.current)}" oninput="app.updateField(event,'stamina.current',true)">
@@ -13817,19 +14610,7 @@ function renderOverview(c){
   </div>` : ''}
   ${renderSubclassCard(c)}
   ${renderPerksCard(c)}
-  <div class="kit-card">
-    <span class="h-label">Kit</span>
-    ${cls && !cls.usesKit ? `<p class="array-hint">${escapeHtml(cls.name)} doesn't use the martial Kit system in the core rules — its loadout comes from its class features instead.</p>` : ''}
-    <div class="kit-grid">
-      <div class="id-field" style="margin-bottom:2px;">
-        <label class="h-label" style="margin-bottom:4px;">Kit Name</label>
-        <button type="button" class="picker-btn ${c.kit.name?'':'placeholder'}" onclick="app.openPicker('kit')">${c.kit.name?escapeHtml(c.kit.name):'Choose Kit…'}</button>
-      </div>
-      <div class="field"><label>Weapon / Implement</label><input type="text" value="${escapeAttr(c.kit.weapon)}" oninput="app.updateField(event,'kit.weapon')"></div>
-      <div class="field"><label>Armor</label><input type="text" value="${escapeAttr(c.kit.armor)}" oninput="app.updateField(event,'kit.armor')"></div>
-      <div class="field"><label>Kit Bonuses / Notes</label><input type="text" value="${escapeAttr(c.kit.notes)}" oninput="app.updateField(event,'kit.notes')"></div>
-    </div>
-  </div>
+  ${renderKitBlock(c)}
   ${renderAncestryTraitsCard(c)}
   ${renderCultureCard(c)}`;
 }
@@ -14059,7 +14840,9 @@ function renderSkills(c){
       ${career ? `<div class="quickbuild-item"><span class="h-label">${escapeHtml(career.name)} grants</span><p>${escapeHtml(career.chooseText)}</p><button class="primary-btn" onclick="app.applyQuickBuild('career')">Apply Career Quick Build</button></div>` : ''}
     </div>` : ''}
     <div class="skill-groups">
-      ${uniqueGroups.map(group=>`
+      ${uniqueGroups.map(group=>{
+        const inputId = 'newskill-' + group.replace(/\s+/g,'_');
+        return `
         <div class="skill-group">
           <h3>${escapeHtml(group)}</h3>
           ${(groups[group]||[]).map(s=>`
@@ -14069,8 +14852,13 @@ function renderSkills(c){
               <button class="del-x" onclick="app.removeSkill('${s.id}')">✕</button>
             </div>
           `).join('')}
-        </div>
-      `).join('')}
+          <div class="skill-row" style="opacity:0.8;">
+            <span style="width:16px;flex-shrink:0;"></span>
+            <input type="text" id="${inputId}" placeholder="New ${escapeAttr(group)} skill…" onkeydown="if(event.key==='Enter'){app.addSkill('${escapeAttr(group)}');}">
+            <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.addSkill('${escapeAttr(group)}')">+ Add</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
   `;
 }
@@ -14081,6 +14869,25 @@ function renderSkills(c){
    SUBCLASSES options carry a blurb plus exactly one of grantedSkill,
    grantedSkillGroup, or firstLevelFeature, so this renders generically
    across all 9 classes without a per-class special case. ---- */
+// Named subclass features unlocked past 1st level (Order/Domain/College/etc.
+// feature tables from Ch.5) -- names only, per the project's copyright
+// posture. For Conduit specifically, each tier's table is shared by both of
+// a hero's two domains (one domain gets it at the table's level, the other
+// at level+1); rather than track which domain "went first" at each tier --
+// a minor flavor choice with no mechanical stakes -- this always shows the
+// table's earliest level as the unlock point, so a feature appears as soon
+// as it could possibly be relevant.
+function renderLeveledFeatureList(o, heroLevel){
+  const list = o.leveledFeatures || [];
+  if(!list.length) return '';
+  return `
+    <div class="feature-pills" style="margin-top:6px;flex-direction:column;align-items:flex-start;gap:4px;">
+      ${list.map(f=>{
+        const unlocked = heroLevel >= f.level;
+        return `<span class="array-hint" style="${unlocked?'':'opacity:0.5;'}">${unlocked ? '' : `Lvl ${f.level} — `}${escapeHtml(f.name)}${unlocked ? '' : ' <em>(not yet available)</em>'}</span>`;
+      }).join('')}
+    </div>`;
+}
 function renderSubclassFeatureCard(c){
   if(!c.class) return '';
   const data = subclassDataFor(c);
@@ -14089,6 +14896,7 @@ function renderSubclassFeatureCard(c){
   if(!chosen.length) return '';
   const opts = chosen.map(name => data.options.find(o=>o.name===name)).filter(Boolean);
   if(!opts.length) return '';
+  const heroLevel = Number(c.level) || 1;
   return `
   <div class="kit-card" style="margin-bottom:20px;">
     <span class="h-label">${escapeHtml(data.subclassLabel)} Feature${opts.length>1?'s':''}</span>
@@ -14099,6 +14907,7 @@ function renderSubclassFeatureCard(c){
         ${o.firstLevelFeature ? `<p class="array-hint">1st-level feature: ${escapeHtml(o.firstLevelFeature)}</p>` : ''}
         ${o.grantedSkill ? `<p class="array-hint">Grants skill: ${escapeHtml(o.grantedSkill)}</p>` : ''}
         ${o.grantedSkillGroup ? `<p class="array-hint">Grants a skill from: ${escapeHtml(o.grantedSkillGroup)}</p>` : ''}
+        ${renderLeveledFeatureList(o, heroLevel)}
       </div>
     `).join('')}
     <p class="array-hint" style="margin-top:10px;">Manage your ${escapeHtml(data.subclassLabel)} choice on the Overview tab — see Chapter 5 for full feature text.</p>
@@ -14524,6 +15333,11 @@ function renderLevelUpModal(c){
     body = `
       <p class="array-hint">Level ${flow.toLevel} unlocks new Heroic Abilities for ${escapeHtml(c.class)}.</p>
       <button type="button" class="primary-btn" style="margin-top:12px;" onclick="app.closeLevelUpToPicker('classAbility')">Choose Abilities Now</button>
+    `;
+  } else if(step === 'skill'){
+    body = `
+      <p class="array-hint">Level ${flow.toLevel} grants a bonus skill for ${escapeHtml(c.class)}. Add it on the Skills tab.</p>
+      <button type="button" class="primary-btn" style="margin-top:12px;" onclick="app.closeLevelUpToTab('skills')">Go to Skills Now</button>
     `;
   } else if(step === 'done'){
     body = `<p class="array-hint">You're all set at level ${flow.toLevel}. Nice work.</p>`;
