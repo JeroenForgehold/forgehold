@@ -10666,6 +10666,21 @@ const XP_LEVELS = [
 function xpBracketFor(xp){ return XP_LEVELS.find(b => xp>=b.min && xp<=b.max) || XP_LEVELS[XP_LEVELS.length-1]; }
 function perkSlotsFor(level){ return 1 + PERKS.perkLevels.filter(l => l<=level).length; } // 1 base (career) + class grants earned so far
 
+// Which guided Level-Up steps apply for the level range just crossed. Always
+// shows the new stats; adds a Perk step if a perkLevels milestone (2/4/6/8/10)
+// falls in (fromLevel, toLevel], and an Abilities step if the class has any
+// heroic ability whose minLevel falls in that same range.
+function levelUpStepsFor(fromLevel, toLevel, c){
+  const steps = ['stats'];
+  const crossedPerkMilestone = (PERKS.perkLevels||[]).some(l => l > fromLevel && l <= toLevel);
+  if(crossedPerkMilestone) steps.push('perk');
+  const clsData = ABILITIES.classes[c.class];
+  const unlockedAbilities = clsData ? (clsData.heroic||[]).filter(h => h.minLevel && h.minLevel > fromLevel && h.minLevel <= toLevel) : [];
+  if(unlockedAbilities.length) steps.push('abilities');
+  steps.push('done');
+  return steps;
+}
+
 /* ============= STATE ============= */
 const state = {
   roster: [],            // my heroes (personal)
@@ -10692,6 +10707,7 @@ const state = {
   combatPollTimer: null,
   monsterRollResults: {},       // UI-only: last dice roll per monster ability id
   bleedRollResult: null,        // UI-only: last bleeding-damage roll (1d6 + level) for the current hero
+  levelUpFlow: null,            // {steps, index, fromLevel, toLevel} while the guided Level-Up modal is open
   monsterAbilityTarget: {},     // UI-only: selected potency-check target hero per ability id
   expandedMonsterGroups: new Set(), // UI-only: which monster group cards are expanded
   monsterLibraryFilter: { search:'', org:'', role:'', family:'', sort:'name' }, // UI-only: Encounter Builder library controls
@@ -11345,6 +11361,44 @@ const app = {
     keys.forEach((k,i)=>{ state.current.characteristics[k] = values[i]; });
     scheduleSave(); renderMain();
   },
+  // Guided Level-Up (Phase 5b): bumps the level, recomputes derived stats
+  // immediately (same recomputeDerived() the manual Level field already used),
+  // then walks the player through whatever's new at that level -- a Perk slot
+  // at 2/4/6/8/10 (PERKS.perkLevels), and any Heroic Abilities whose minLevel
+  // falls in the range just crossed (already-encoded per-class ability data,
+  // the same minLevel gating the Abilities picker uses to lock/unlock cards).
+  // Scoped to be genuinely useful through echelon 1 (levels 1-3); above that
+  // it still recomputes stats correctly, it just has less to say because
+  // this app hasn't verified echelon 2+ class features yet.
+  startLevelUp(){
+    const c = state.current; if(!c || !c.class) return;
+    const fromLevel = Math.max(1, Number(c.level)||1);
+    const toLevel = fromLevel + 1;
+    c.level = toLevel;
+    recomputeDerived(c);
+    state.levelUpFlow = { steps: levelUpStepsFor(fromLevel, toLevel, c), index: 0, fromLevel, toLevel };
+    scheduleSave();
+    render();
+  },
+  levelUpNext(){
+    if(!state.levelUpFlow) return;
+    state.levelUpFlow.index++;
+    if(state.levelUpFlow.index >= state.levelUpFlow.steps.length) state.levelUpFlow = null;
+    render();
+  },
+  cancelLevelUp(){
+    // The level itself is already committed (leveling up isn't destructive --
+    // it's the same "just recompute stats" action the manual Level field always
+    // did); closing early just means picking up any remaining Perk/Ability
+    // choice later from the normal Overview/Abilities tabs instead of here.
+    state.levelUpFlow = null;
+    render();
+  },
+  closeLevelUpToPicker(type){
+    state.levelUpFlow = null;
+    state.pickerOpen = type;
+    render();
+  },
   applyQuickBuild(source){
     const c = state.current;
     if(source==='class'){ const cls = findClassData(c.class); if(cls) cls.skills.quickBuild.forEach(n=>ensureSkillTrained(c,n)); }
@@ -11968,7 +12022,6 @@ function renderMain(){
       <div class="tabs">
         ${tabBtn('home','Home')}
         ${combatTabVisible(c) ? tabBtn('combat','⚔ Combat') : ''}
-        ${tabBtn('overview','Overview')}
         ${tabBtn('skills','Skills')}
         ${tabBtn('abilities','Abilities')}
         ${tabBtn('items','Items')}
@@ -12027,10 +12080,17 @@ function renderVitalsBar(c){
    through Home/Overview/Skills/Abilities/Items/Downtime/Notes, in addition to tapping
    the tab bar. Bound once to the stable #main element since renderMain()
    replaces its innerHTML (not the element itself) on every render. ---- */
-const TAB_ORDER = ['home','overview','skills','abilities','items','downtime','notes'];
+// 'overview' (now presented to players as "Edit Hero") is deliberately left
+// out of the day-to-day tab order -- per the screen-rebuild plan, creation-time
+// fields (ancestry/kit/characteristics/culture) shouldn't be one swipe away
+// from Home during normal play. It's still a fully valid tab id: reached via
+// the "Edit Hero" button on Home or the Setup Checklist's "Go" links, both of
+// which call app.setTab('overview') directly, and left via the back button
+// rendered at the top of renderOverview.
+const TAB_ORDER = ['home','skills','abilities','items','downtime','notes'];
 function currentTabOrder(){
   const c = state.current;
-  return combatTabVisible(c) ? ['home','combat','overview','skills','abilities','items','downtime','notes'] : TAB_ORDER;
+  return combatTabVisible(c) ? ['home','combat','skills','abilities','items','downtime','notes'] : TAB_ORDER;
 }
 function attachSwipeHandlers(main){
   let sx = 0, sy = 0, tracking = false;
@@ -13430,7 +13490,11 @@ function renderHome(c){
       <div class="card single"><span class="h-label">Size</span><div class="card-row"><span class="vc-value">${escapeHtml(c.size)}</span></div></div>
     </div>
   </div>
-  <p class="array-hint" style="margin-top:4px;">Fine-tune characteristics, kit, ancestry traits, and culture on the Overview tab.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+    <button type="button" class="primary-btn secondary" onclick="app.setTab('overview')">Edit Hero</button>
+    ${c.class ? `<button type="button" class="primary-btn" onclick="app.startLevelUp()">⬆ Level Up (${escapeHtml(c.level)} → ${Number(c.level)+1})</button>` : ''}
+  </div>
+  <p class="array-hint" style="margin-top:6px;">Edit Hero is where characteristics, kit, ancestry traits, and culture live -- day to day you shouldn't need it.</p>
 
   <div class="kit-card">
     <span class="h-label">Wealth — Score ${escapeAttr(c.wealth)}</span>
@@ -13491,6 +13555,10 @@ function renderOverview(c){
     </div>` : '';
 
   return `
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+    <span class="h-label" style="color:var(--forge);">Edit Hero — creation-time choices</span>
+    <button type="button" class="hs-edit-btn" onclick="app.setTab('home')">← Back to Home</button>
+  </div>
   <div class="overview-grid">
     <div class="pentagon-wrap">
       <div class="pentagon">
@@ -13855,8 +13923,20 @@ function tierFor(total){ return total<=11 ? 1 : (total<=16 ? 2 : 3); }
 const CHAR_KEYS = ['might','agility','reason','intuition','presence'];
 function detectRollCharacteristic(effect){
   if(!effect) return null;
-  const m = /power\s*roll\s*\+\s*(might|agility|reason|intuition|presence)/i.exec(effect);
-  return m ? m[1].toLowerCase() : null;
+  // Primary pattern: the ability's lead-in sentence, "Power roll + Intuition."
+  const lead = /power\s*roll\s*\+\s*(might|agility|reason|intuition|presence)/i.exec(effect);
+  if(lead) return lead[1].toLowerCase();
+  // Fallback: some paraphrased effects (e.g. Blessed Light) drop that lead-in
+  // sentence and only state the bonus inline in each tier's damage line, like
+  // "3 + Intuition, 5 + Intuition, or 8 + Intuition holy damage" -- there's no
+  // "Power roll +" phrase anywhere, so the roll silently got no characteristic
+  // added and the tier came out wrong. Scan every "+ Characteristic" mention;
+  // if they all agree on one characteristic, that's almost certainly the
+  // ability's roll characteristic, so use it. If they disagree, stay silent
+  // rather than guess wrong.
+  const matches = [...effect.matchAll(/\+\s*(might|agility|reason|intuition|presence)\b/gi)].map(m=>m[1].toLowerCase());
+  if(matches.length && matches.every(m=>m===matches[0])) return matches[0];
+  return null;
 }
 
 function renderRollBlock(a, c){
@@ -14005,7 +14085,7 @@ function formatTierRange(range){
   r = r.replace(/^(\d+)\s*-\s*(\d+)$/, '$1–$2');
   return r;
 }
-function renderEffectDisplay(effect, activeTier){
+function renderEffectDisplay(effect, activeTier, hideTrail){
   if(!effect) return '';
   const parsed = parseTieredEffect(effect) || parseTieredEffectB(effect) || parseTieredEffectC(effect);
   if(!parsed){
@@ -14021,7 +14101,7 @@ function renderEffectDisplay(effect, activeTier){
         </div>
       `).join('')}
     </div>
-    ${parsed.trail ? `<div class="tier-trail">${escapeHtml(parsed.trail)}</div>` : ''}
+    ${(parsed.trail && !hideTrail) ? `<div class="tier-trail">${escapeHtml(parsed.trail)}</div>` : ''}
   `;
 }
 function abilityRowHtml(a, c){
@@ -14052,7 +14132,7 @@ function abilityRowHtml(a, c){
         <div class="field"><label>Distance</label><input type="text" value="${escapeAttr(a.distance)}" oninput="app.updateAbility(event,'${a.id}','distance')" placeholder="Melee 1, Ranged 5…"></div>
         <div class="field"><label>Target</label><input type="text" value="${escapeAttr(a.target)}" oninput="app.updateAbility(event,'${a.id}','target')" placeholder="One creature…"></div>
       </div>
-      ${a.effect ? `<div class="tier-preview">${renderEffectDisplay(a.effect, state.rollResults[a.id] ? state.rollResults[a.id].tier : null)}</div>` : ''}
+      ${a.effect ? `<div class="tier-preview">${renderEffectDisplay(a.effect, state.rollResults[a.id] ? state.rollResults[a.id].tier : null, true)}</div>` : ''}
       <div class="field"><label>Effect${a.effect && parseTieredEffect(a.effect) ? ' (edit raw text)' : ''}</label><textarea oninput="app.updateAbility(event,'${a.id}','effect')" placeholder="Power roll, effect text, tier results…">${escapeHtml(a.effect)}</textarea></div>
       ${renderRollBlock(a, c)}
       <button type="button" class="ability-remove-btn" onclick="app.removeAbility('${a.id}')">✕ Remove Ability</button>
@@ -14159,11 +14239,58 @@ function renderPickerDetailModal(type, it, label){
   </div>`;
 }
 /* ---- picker modal ---- */
+/* ---- Guided Level-Up modal (Phase 5b) ---- */
+function renderLevelUpModal(c){
+  const flow = state.levelUpFlow;
+  if(!flow) return '';
+  const step = flow.steps[flow.index];
+  let body = '';
+  if(step === 'stats'){
+    body = `
+      <p class="array-hint">Level ${flow.fromLevel} → <strong style="color:var(--forge);">${flow.toLevel}</strong>. Stats recalculated automatically:</p>
+      <div class="feature-pills" style="margin-top:10px;">
+        <span class="feature-pill">Stamina max: ${escapeHtml(c.stamina.max)}</span>
+        <span class="feature-pill">Recovery Value: ${escapeHtml(c.recoveries.value)}</span>
+      </div>
+      <p class="array-hint" style="margin-top:10px;">Current Stamina wasn't topped up unless it was already full -- bump it yourself on Home if your Director calls for a full heal on level-up.</p>
+    `;
+  } else if(step === 'perk'){
+    const slots = perkSlotsFor(flow.toLevel);
+    const chosen = (c.perks||[]).length;
+    body = `
+      <p class="array-hint">Level ${flow.toLevel} grants a new Perk slot (${chosen} / ${slots} chosen so far).</p>
+      <button type="button" class="primary-btn" style="margin-top:12px;" onclick="app.closeLevelUpToPicker('perk')">Choose Perk Now</button>
+    `;
+  } else if(step === 'abilities'){
+    body = `
+      <p class="array-hint">Level ${flow.toLevel} unlocks new Heroic Abilities for ${escapeHtml(c.class)}.</p>
+      <button type="button" class="primary-btn" style="margin-top:12px;" onclick="app.closeLevelUpToPicker('classAbility')">Choose Abilities Now</button>
+    `;
+  } else if(step === 'done'){
+    body = `<p class="array-hint">You're all set at level ${flow.toLevel}. Nice work.</p>`;
+  }
+  const isLast = step === 'done';
+  return `
+  <div class="modal-backdrop" onclick="app.cancelLevelUp()">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>Level Up</h2><button class="modal-close" onclick="app.cancelLevelUp()">✕</button></div>
+      <div class="modal-note">${body}</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:0 22px 20px;">
+        ${isLast
+          ? `<button type="button" class="primary-btn" onclick="app.cancelLevelUp()">Done</button>`
+          : `<button type="button" class="primary-btn secondary" onclick="app.levelUpNext()">Skip</button>
+             <button type="button" class="primary-btn" onclick="app.levelUpNext()">Next</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderModal(){
   let modalRoot = document.getElementById('modal-root');
   if(!modalRoot){ modalRoot = document.createElement('div'); modalRoot.id='modal-root'; document.getElementById('app').appendChild(modalRoot); }
   if(state.assignItemHeroId){ modalRoot.innerHTML = renderAssignItemModal(state.assignItemHeroId); return; }
   if(state.grantTitleHeroId){ modalRoot.innerHTML = renderGrantTitleModal(state.grantTitleHeroId); return; }
+  if(state.levelUpFlow && state.current){ modalRoot.innerHTML = renderLevelUpModal(state.current); return; }
   if(!state.pickerOpen){ modalRoot.innerHTML=''; return; }
 
   const type = state.pickerOpen;
