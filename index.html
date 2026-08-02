@@ -1029,6 +1029,10 @@ const SUBCLASSES = {
         "blurb": "Permanence and stone; leaning on earth magic makes you progressively harder to shove around.",
         "leveledFeatures": [
           {
+            "level": 2,
+            "name": "Disciple of Earth"
+          },
+          {
             "level": 3,
             "name": "Earth Accepts Me"
           },
@@ -1047,6 +1051,10 @@ const SUBCLASSES = {
         "firstLevelFeature": "Acolyte of Fire",
         "blurb": "Pure destruction; your flame magic hits harder, including your Hurl Element strikes.",
         "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "Disciple of Fire"
+          },
           {
             "level": 3,
             "name": "A Conversation With Fire"
@@ -1067,6 +1075,10 @@ const SUBCLASSES = {
         "blurb": "Growth and living things; leftover magic from your damaging green spells becomes temporary Stamina for you or a nearby ally.",
         "leveledFeatures": [
           {
+            "level": 2,
+            "name": "Disciple of the Green"
+          },
+          {
             "level": 3,
             "name": "Remember Growth and Sun and Rain"
           },
@@ -1085,6 +1097,10 @@ const SUBCLASSES = {
         "firstLevelFeature": "Acolyte of the Mystery",
         "blurb": "Space and unreality; your ranged void magic reaches two squares farther than anyone else's.",
         "leveledFeatures": [
+          {
+            "level": 2,
+            "name": "There Is No Space Between"
+          },
           {
             "level": 3,
             "name": "Distance Is Only Memory"
@@ -1527,6 +1543,547 @@ const SUBCLASSES = {
     ]
   }
 };
+
+// ---------------------------------------------------------------------
+// Censor's second, independent subclass axis -- Deity + Domain. Order
+// (SUBCLASSES.Censor) and this Domain axis are both chosen at 1st level and
+// don't interact with each other; a Censor picks one Order AND one Domain.
+// Feature names here were verified directly against the Heroes PDF's
+// 1st/4th/7th-Level Censor Domain Features tables (Ch.5) -- these overlap
+// heavily with Conduit's Domain feature names (same underlying domain-magic
+// system, different resource), but aren't assumed identical: Storm's
+// 7th-level name genuinely differs between the two classes.
+const CENSOR_DOMAINS = [
+  {
+    "name": "Creation",
+    "firstLevelFeature": "Hands of the Maker",
+    "skillGroup": "Crafting",
+    "blurb": "Shaping and building magic; rewards you when area magic goes off nearby and can raise a wall of stone.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Improved Hands of the Maker"
+      },
+      {
+        "level": 7,
+        "name": "Divine Quartermaster"
+      }
+    ]
+  },
+  {
+    "name": "Death",
+    "firstLevelFeature": "Grave Speech",
+    "skillGroup": "Lore",
+    "blurb": "The power of endings; feeds on foes dropping and can lay a lethal curse.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Séance"
+      },
+      {
+        "level": 7,
+        "name": "Word of Death Deferred"
+      }
+    ]
+  },
+  {
+    "name": "Fate",
+    "firstLevelFeature": "Oracular Visions",
+    "skillGroup": "Lore",
+    "blurb": "Destiny made legible; you can lock in how someone's next roll turns out.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Oracular Warning"
+      },
+      {
+        "level": 7,
+        "name": "Word of Fate Denied"
+      }
+    ]
+  },
+  {
+    "name": "Knowledge",
+    "firstLevelFeature": "Blessing of Comprehension",
+    "skillGroup": "Lore",
+    "blurb": "Insight into the enemy's plans; hands surges to your allies.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Saint's Epiphany"
+      },
+      {
+        "level": 7,
+        "name": "Gods' Library"
+      }
+    ]
+  },
+  {
+    "name": "Life",
+    "firstLevelFeature": "Revitalizing Ritual",
+    "skillGroup": "Exploration",
+    "blurb": "Healing and vitality; lets an ally spend a Recovery, shake off a condition, or take on temporary Stamina.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Blessing of Life"
+      },
+      {
+        "level": 7,
+        "name": "Font of Grace"
+      }
+    ]
+  },
+  {
+    "name": "Love",
+    "firstLevelFeature": "Blessing of Compassion",
+    "skillGroup": "Interpersonal",
+    "blurb": "Bonds between allies; helping others feeds your wrath and shields the party with temporary Stamina.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Invocation of the Heart"
+      },
+      {
+        "level": 7,
+        "name": "Covenant of the Heart"
+      }
+    ]
+  },
+  {
+    "name": "Nature",
+    "firstLevelFeature": "Faithful Friend",
+    "skillGroup": "Exploration",
+    "blurb": "The wild's raw elements; elemental damage nearby fuels you, and vines rise at your call.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Wode Road"
+      },
+      {
+        "level": 7,
+        "name": "Nature's Bounty"
+      }
+    ]
+  },
+  {
+    "name": "Protection",
+    "firstLevelFeature": "Protective Circle",
+    "skillGroup": "Exploration",
+    "blurb": "Wards and guardianship, keeping those in your care standing.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Impervious Touch"
+      },
+      {
+        "level": 7,
+        "name": "Blessing of Iron"
+      }
+    ]
+  },
+  {
+    "name": "Storm",
+    "firstLevelFeature": "Blessing of Fortunate Weather",
+    "skillGroup": "Exploration",
+    "blurb": "Wind and thunder; between rests you can set the weather that follows the party.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Windwalk"
+      },
+      {
+        "level": 7,
+        "name": "Ride the Lightning"
+      }
+    ]
+  },
+  {
+    "name": "Sun",
+    "firstLevelFeature": "Inner Light",
+    "skillGroup": "Lore",
+    "blurb": "Fire and holy radiance; nearby burning or divine damage stokes your wrath.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Light of Revelation"
+      },
+      {
+        "level": 7,
+        "name": "Light of the Burning Sun"
+      }
+    ]
+  },
+  {
+    "name": "Trickery",
+    "firstLevelFeature": "Inspired Deception",
+    "skillGroup": "Intrigue",
+    "blurb": "Misdirection and cunning; rewards sneaking and assisting, and slides a creature out of position.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Blessing of Secrets"
+      },
+      {
+        "level": 7,
+        "name": "Trinity of Trickery"
+      }
+    ]
+  },
+  {
+    "name": "War",
+    "firstLevelFeature": "Sanctified Weapon",
+    "skillGroup": "Exploration",
+    "blurb": "Sanctified violence; big hits nearby build wrath and you hand out surges.",
+    "leveledFeatures": [
+      {
+        "level": 4,
+        "name": "Improved Sanctified Weapon"
+      },
+      {
+        "level": 7,
+        "name": "Your Triumphs Are Remembered"
+      }
+    ]
+  }
+];
+
+// Deities and Saints and Domains tables, Chapter 14: Gods and Religion --
+// names and domain portfolios only, no lore prose. Used to suggest which
+// Domain fits a chosen Deity for Censor and Conduit; picking any other name
+// (including a Director-approved homebrew deity) is always still valid.
+const DEITIES_AND_SAINTS = [
+  {
+    "name": "Adûn",
+    "type": "deity",
+    "domains": [
+      "Creation",
+      "Life",
+      "Love",
+      "Protection"
+    ]
+  },
+  {
+    "name": "Cavall",
+    "type": "deity",
+    "domains": [
+      "Life",
+      "Love",
+      "Protection",
+      "War"
+    ]
+  },
+  {
+    "name": "Cyrvis",
+    "type": "deity",
+    "domains": [
+      "Death",
+      "Fate",
+      "Knowledge",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Kul",
+    "type": "deity",
+    "domains": [
+      "Knowledge",
+      "Life",
+      "Sun",
+      "Trickery",
+      "War"
+    ]
+  },
+  {
+    "name": "Nebular the Star Mother",
+    "type": "deity",
+    "domains": [
+      "Creation",
+      "Life",
+      "Love",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Nikros",
+    "type": "deity",
+    "domains": [
+      "Death",
+      "Fate",
+      "Storm",
+      "War"
+    ]
+  },
+  {
+    "name": "Ord",
+    "type": "deity",
+    "domains": [
+      "Creation",
+      "Knowledge",
+      "Protection",
+      "Sun",
+      "War"
+    ]
+  },
+  {
+    "name": "OV the Wave Pilot",
+    "type": "deity",
+    "domains": [
+      "Fate",
+      "Knowledge",
+      "Storm",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Salorna",
+    "type": "deity",
+    "domains": [
+      "Life",
+      "Nature",
+      "Storm",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Val",
+    "type": "deity",
+    "domains": [
+      "Creation",
+      "Knowledge",
+      "Life",
+      "Nature",
+      "Protection"
+    ]
+  },
+  {
+    "name": "Atossa the Shepherd",
+    "type": "saint",
+    "domains": [
+      "Fate",
+      "Protection",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Cho'kassa the Time Rider",
+    "type": "saint",
+    "domains": [
+      "Storm",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Draighen the Warden",
+    "type": "saint",
+    "domains": [
+      "Nature",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Eriarwen the Wroth",
+    "type": "saint",
+    "domains": [
+      "Nature",
+      "Storm"
+    ]
+  },
+  {
+    "name": "Eseld the Eye",
+    "type": "saint",
+    "domains": [
+      "Knowledge",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Gaed the Confessor",
+    "type": "saint",
+    "domains": [
+      "Love",
+      "Protection"
+    ]
+  },
+  {
+    "name": "Grole the One-Handed",
+    "type": "saint",
+    "domains": [
+      "Life",
+      "War"
+    ]
+  },
+  {
+    "name": "Gryffyn the Stout",
+    "type": "saint",
+    "domains": [
+      "Creation",
+      "Life"
+    ]
+  },
+  {
+    "name": "Gwenllian the Fell-Handed",
+    "type": "saint",
+    "domains": [
+      "Protection",
+      "War"
+    ]
+  },
+  {
+    "name": "Illwyv li Orchiax",
+    "type": "saint",
+    "domains": [
+      "Nature",
+      "Protection"
+    ]
+  },
+  {
+    "name": "Khorvath Who Slew a Thousand",
+    "type": "saint",
+    "domains": [
+      "Sun",
+      "War"
+    ]
+  },
+  {
+    "name": "Khravila Who Ran Forty Leagues",
+    "type": "saint",
+    "domains": [
+      "Knowledge",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Kyruyalka the False Principle",
+    "type": "saint",
+    "domains": [
+      "Death",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Lady Magnetar",
+    "type": "saint",
+    "domains": [
+      "Life",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Llewellyn the Valiant",
+    "type": "saint",
+    "domains": [
+      "Life",
+      "Protection"
+    ]
+  },
+  {
+    "name": "Mahsiti the Weaver",
+    "type": "saint",
+    "domains": [
+      "Creation",
+      "Knowledge",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Pentalion the Paladin",
+    "type": "saint",
+    "domains": [
+      "Death",
+      "War"
+    ]
+  },
+  {
+    "name": "Prexaspes the Stargazer",
+    "type": "saint",
+    "domains": [
+      "Nature",
+      "Protection",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Ripples of Honey on a Shore of Gold",
+    "type": "saint",
+    "domains": [
+      "Life",
+      "Protection"
+    ]
+  },
+  {
+    "name": "A Sea of Suns",
+    "type": "saint",
+    "domains": [
+      "Creation",
+      "Life"
+    ]
+  },
+  {
+    "name": "Stakros the Engineer",
+    "type": "saint",
+    "domains": [
+      "Creation",
+      "Knowledge"
+    ]
+  },
+  {
+    "name": "The Taste of Morning",
+    "type": "saint",
+    "domains": [
+      "Creation",
+      "Knowledge"
+    ]
+  },
+  {
+    "name": "Thellasko the Great Designer",
+    "type": "saint",
+    "domains": [
+      "Knowledge",
+      "War"
+    ]
+  },
+  {
+    "name": "Thyll Hylacae",
+    "type": "saint",
+    "domains": [
+      "Life",
+      "Nature"
+    ]
+  },
+  {
+    "name": "Uryal the Subtle",
+    "type": "saint",
+    "domains": [
+      "Knowledge",
+      "Trickery"
+    ]
+  },
+  {
+    "name": "Valak-koth the Seeker",
+    "type": "saint",
+    "domains": [
+      "Knowledge",
+      "Sun"
+    ]
+  },
+  {
+    "name": "Yllin Dyrvis",
+    "type": "saint",
+    "domains": [
+      "Knowledge",
+      "Nature"
+    ]
+  },
+  {
+    "name": "Zarok the Law-Giver",
+    "type": "saint",
+    "domains": [
+      "Protection",
+      "War"
+    ]
+  }
+];
 
 // Ancestry purchased-trait menus — the 3-point (sometimes more) budget spent beyond the free signature trait.
 // Costs and names are game facts; summaries are Forgehold's own terse paraphrase, not rulebook text.
@@ -11279,6 +11836,7 @@ function defaultChar(id){
     titles: [],
     perks: [],
     culture: { environment:'', organization:'', upbringing:'', skillPicks:{environment:'',organization:'',upbringing:''}, language:'' },
+    censorDomain: '', deity: '',  // Censor's second subclass axis -- ignored by every other class
     languages: [],  // additional languages beyond Caelian (auto) and culture.language, granted by career
     skills: seedSkills(),
     abilities: [],
@@ -11341,6 +11899,7 @@ const state = {
   grantTitleHeroId: null,  // hero id currently receiving a Director-granted title, or null
   pickerOpen: null,        // null | 'ancestry' | 'career' | 'class'
   expandedAbilityIds: new Set(),  // UI-only: which ability rows are expanded, not persisted
+  expandedPickerAbilities: new Set(), // UI-only: which cards in the Choose Abilities picker (task #147) show full effect text
   rollResults: {},          // UI-only: last dice roll per ability id, not persisted
 
   // --- Encounter Runner (0006_combat.sql) -- all UI-only / polled cache,
@@ -12278,6 +12837,20 @@ const app = {
     render();
   },
 
+  chooseCensorDomain(name){
+    const c = state.current;
+    c.censorDomain = name;
+    state.pickerOpen = null;
+    scheduleSave();
+    render();
+  },
+  chooseDeity(name){
+    const c = state.current;
+    c.deity = name;
+    state.pickerOpen = null;
+    scheduleSave();
+    render();
+  },
   chooseCultureAspect(aspectKey, name){
     const c = state.current;
     c.culture = c.culture || { environment:'', organization:'', upbringing:'', skillPicks:{}, language:'' };
@@ -12500,6 +13073,15 @@ const app = {
     state.current.downtimeProjects = state.current.downtimeProjects || [];
     state.current.downtimeProjects.unshift({ id: projectId(), name:'New Project', characteristic:'', goal:0, progress:0, notes:'' });
     scheduleSave(); renderMain();
+  },
+  // task #147: expand/collapse a single card's effect text in the Choose
+  // Abilities picker (renderClassAbilityModal) -- keeps the always-visible
+  // part of each card down to name/tags/Add button so the list is scannable
+  // on a phone instead of every ability's full tier table being open at once.
+  toggleAbilityPickCard(key){
+    if(state.expandedPickerAbilities.has(key)) state.expandedPickerAbilities.delete(key);
+    else state.expandedPickerAbilities.add(key);
+    render();
   },
   toggleClassAbility(kind, name){
     const c = state.current;
@@ -12776,7 +13358,19 @@ function renderMain(){
     attachSwipeHandlers(main);
   }
 
-  if(state.view === 'campaign'){ main.innerHTML = renderCampaignView(); return; }
+  // Scroll-position guard (fixes the character-creation "flicker back to
+  // top" bug): capture wherever the user actually is -- #main's own scrollTop
+  // on desktop, the document's scroll on mobile (where #main doesn't scroll,
+  // see the mobile `.main{overflow:visible}` override) -- and restore it
+  // after the innerHTML swap below, on the next frame so layout has settled.
+  const __prevMainScroll = main.scrollTop;
+  const __prevDocScroll = window.scrollY || document.documentElement.scrollTop || 0;
+  const __restoreScroll = () => {
+    if(main.scrollTop === 0 && __prevMainScroll > 0) main.scrollTop = __prevMainScroll;
+    if((window.scrollY||0) === 0 && __prevDocScroll > 0) window.scrollTo(0, __prevDocScroll);
+  };
+
+  if(state.view === 'campaign'){ main.innerHTML = renderCampaignView(); requestAnimationFrame(__restoreScroll); return; }
 
   const c = state.current;
   if(!c){
@@ -12786,6 +13380,7 @@ function renderMain(){
 
   if(state.wizardActive){
     main.innerHTML = renderWizard(c);
+    requestAnimationFrame(__restoreScroll);
     return;
   }
 
@@ -12825,6 +13420,7 @@ function renderMain(){
     </div>
     <div class="content">${renderTab(c)}</div>
   `;
+  requestAnimationFrame(__restoreScroll);
 }
 
 function renderVitalsBar(c){
@@ -12895,7 +13491,7 @@ function attachSwipeHandlers(main){
   main.addEventListener('touchend', e=>{
     if(!tracking) return;
     tracking = false;
-    if(!state.current || state.view !== 'heroes' || state.pickerOpen || state.assignItemHeroId) return;
+    if(!state.current || state.view !== 'heroes' || state.pickerOpen || state.assignItemHeroId || state.wizardActive) return;
     const dx = e.changedTouches[0].clientX - sx;
     const dy = e.changedTouches[0].clientY - sy;
     if(Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8){
@@ -13998,10 +14594,15 @@ function renderMonsterAbilities(baseName, combat){
             ? `<span class="resource-pill malice-cost-pill">⚡ ${maliceCost} Malice</span>`
             : `<span class="resource-pill">${escapeHtml(a.cost)}</span>`)
         : '';
+      // task #148: don't let a click on a costed ability silently walk
+      // Malice negative -- grey the button out and say why instead of
+      // letting the click through to a confirm()-then-clamp-to-0 flow.
+      const maliceAvailable = Number(combat.malice) || 0;
+      const canAffordMalice = maliceCost <= 0 || maliceCost <= maliceAvailable;
       const actionBtn = hasRoll
-        ? `<button type="button" class="roll-btn ${maliceCost>0?'spend-btn':''}" onclick="app.rollMonsterAbility('${a.id}')">🎲 Roll${maliceCost>0?` ⚡ ${maliceCost}`:''}</button>`
+        ? `<button type="button" class="roll-btn ${maliceCost>0?'spend-btn':''}" ${(!canAffordMalice)?'disabled title="Not enough Malice"':''} onclick="app.rollMonsterAbility('${a.id}')">🎲 Roll${maliceCost>0?` ⚡ ${maliceCost}`:''}${(!canAffordMalice)?' (Not enough Malice)':''}</button>`
         : (maliceCost > 0
-            ? `<button type="button" class="roll-btn spend-btn" onclick="app.useMonsterAbility('${a.id}')">⚡ Use — spend ${maliceCost} Malice</button>`
+            ? `<button type="button" class="roll-btn spend-btn" ${(!canAffordMalice)?'disabled title="Not enough Malice"':''} onclick="app.useMonsterAbility('${a.id}')">⚡ ${canAffordMalice?`Use — spend ${maliceCost} Malice`:'Not enough Malice'}</button>`
             : '');
       return `
       <div class="picker-card pick-card" style="margin-top:6px;">
@@ -14113,12 +14714,18 @@ function parseMaliceCost(costStr){
   const m = /(\d+)/.exec(costStr || '');
   return { base: m ? Number(m[1]) : 0, variable: /\+/.test(costStr || '') };
 }
-function renderMaliceOptionRow(a){
+function renderMaliceOptionRow(a, currentMalice){
+  // task #148: same insufficient-resource guard as the monster ability
+  // buttons -- grey out and relabel rather than letting a tap through to a
+  // confirm()-then-clamp-to-0 spend. Variable-cost features ("5+ Malice")
+  // only need their minimum (parseMaliceCost's base) to be affordable.
+  const { base } = parseMaliceCost(a.cost);
+  const canAfford = currentMalice === undefined || base <= currentMalice;
   return `
   <div class="malice-opt-row">
     <div class="malice-opt-name">${escapeHtml(a.name)} <span class="resource-pill">${escapeHtml(a.cost)}</span></div>
     <p class="array-hint" style="margin:4px 0 6px;">${escapeHtml(a.effect)}</p>
-    <button type="button" class="pick-card-btn" style="margin-top:0;width:auto;padding:5px 10px;" onclick="app.spendMalice('${escapeAttr(a.name)}','${escapeAttr(a.cost)}')">⚡ Spend Malice</button>
+    <button type="button" class="pick-card-btn" style="margin-top:0;width:auto;padding:5px 10px;" ${canAfford?'':'disabled title="Not enough Malice"'} onclick="app.spendMalice('${escapeAttr(a.name)}','${escapeAttr(a.cost)}')">⚡ ${canAfford?'Spend Malice':'Not enough Malice'}</button>
   </div>`;
 }
 function renderMaliceOptionsCard(combat){
@@ -14138,12 +14745,12 @@ function renderMaliceOptionsCard(combat){
     <p class="array-hint" style="margin-top:4px;">Any monster can use these -- spend with the +/− above, then narrate it.</p>
     <div class="malice-opt-group">
       <span class="malice-opt-group-label">Any Monster</span>
-      ${GENERIC_MALICE.map(renderMaliceOptionRow).join('')}
+      ${GENERIC_MALICE.map(a=>renderMaliceOptionRow(a, combat.malice)).join('')}
     </div>
     ${Array.from(familySeen.entries()).map(([family, abilities])=>`
       <div class="malice-opt-group">
         <span class="malice-opt-group-label">${escapeHtml(titleCase(family))}</span>
-        ${abilities.map(renderMaliceOptionRow).join('')}
+        ${abilities.map(a=>renderMaliceOptionRow(a, combat.malice)).join('')}
       </div>
     `).join('')}
   </div>`;
@@ -14340,6 +14947,7 @@ function renderHome(c){
   </div>
 
   ${renderSubclassCard(c)}
+  ${renderCensorDomainCard(c)}
   `;
 }
 
@@ -14418,6 +15026,7 @@ function wizardStepsFor(c){
     if(cls && cls.usesKit) steps.push({ key:'kit', title:'Kit', isDone: c=>!!(c.kit && c.kit.name) });
     if(clsData) steps.push({ key:'signature', title:'Signature Ability', isDone: c=>(c.abilities||[]).some(a=>a._src==='class') });
     if(subData) steps.push({ key:'subclass', title: subData.subclassLabel, isDone: c=>(c.subclass||[]).length>0 });
+    if(c.class==='Censor') steps.push({ key:'censorDomain', title:'Deity & Domain', isDone: c=>!!(c.deity && c.censorDomain) });
   }
   steps.push({ key:'career', title:'Career', isDone: c=>!!c.career });
   steps.push({ key:'culture', title:'Culture', isDone: c=>!!(c.culture && c.culture.environment && c.culture.organization && c.culture.upbringing) });
@@ -14491,6 +15100,13 @@ function renderWizardStepBody(key, c){
       <h2>${escapeHtml(subclassDataFor(c).subclassLabel)}</h2>
       <p class="array-hint">Your class's subclass axis — see Chapter 5 for full feature text.</p>
       ${renderSubclassCard(c)}
+    `;
+  }
+  if(key === 'censorDomain'){
+    return `
+      <h2>Deity &amp; Domain</h2>
+      <p class="array-hint">A second, independent choice from your Order — see Chapter 5 and Chapter 14 for full text.</p>
+      ${renderCensorDomainCard(c)}
     `;
   }
   if(key === 'career'){
@@ -14609,6 +15225,7 @@ function renderOverview(c){
     <p class="array-hint" style="margin-top:8px;">Feature names only — see Chapter 5: Classes in your rulebook for full text.</p>
   </div>` : ''}
   ${renderSubclassCard(c)}
+  ${renderCensorDomainCard(c)}
   ${renderPerksCard(c)}
   ${renderKitBlock(c)}
   ${renderAncestryTraitsCard(c)}
@@ -14706,6 +15323,37 @@ function renderSubclassCard(c){
       ${chosen.map(n=>`<span class="feature-pill">${escapeHtml(n)} <span class="pill-x" onclick="app.removeSubclassOption('${escapeAttr(n)}')">✕</span></span>`).join('')}
     </div>` : `<p class="array-hint" style="margin-top:4px;">Not chosen yet.</p>`}
     <button type="button" class="primary-btn" style="margin-top:12px;" onclick="app.openPicker('subclass')">${chosen.length?'Edit':'Choose'} ${escapeHtml(data.subclassLabel)}</button>
+  </div>`;
+}
+
+/* ---- Censor's second subclass axis: Deity + Domain -- independent of the
+   Order card above. Shown on both Overview (to manage the choice) and
+   Abilities (to see the resulting features), since it's the only class with
+   two concurrent subclass systems and doesn't fit the generic subclassDataFor
+   pattern cleanly enough to be worth a bigger refactor for one class. ---- */
+function renderCensorDomainCard(c){
+  if(c.class !== 'Censor') return '';
+  const domainData = CENSOR_DOMAINS.find(d=>d.name===c.censorDomain);
+  const deityData = DEITIES_AND_SAINTS.find(d=>d.name===c.deity);
+  return `
+  <div class="kit-card">
+    <span class="h-label">Deity &amp; Domain</span>
+    <p class="array-hint">A second, independent choice from your Order — pick a deity, then one domain from their portfolio (any domain is still valid if your table plays it looser). See Chapter 5 and Chapter 14.</p>
+    <div style="margin-top:10px;">
+      <span class="h-label">Deity</span>
+      ${c.deity ? `<div class="feature-pills" style="margin-top:6px;"><span class="feature-pill">${escapeHtml(c.deity)}${deityData?` <span style="color:var(--text-faint);">(${escapeHtml(deityData.domains.join(', '))})</span>`:''} <span class="pill-x" onclick="app.chooseDeity('')">✕</span></span></div>` : `<p class="array-hint" style="margin-top:4px;">Not chosen yet.</p>`}
+      <button type="button" class="primary-btn secondary" style="margin-top:8px;" onclick="app.openPicker('deity')">${c.deity?'Change':'Choose'} Deity</button>
+    </div>
+    <div style="margin-top:16px;">
+      <span class="h-label">Domain</span>
+      ${c.censorDomain ? `<div class="feature-pills" style="margin-top:6px;"><span class="feature-pill">${escapeHtml(c.censorDomain)} <span class="pill-x" onclick="app.chooseCensorDomain('')">✕</span></span></div>` : `<p class="array-hint" style="margin-top:4px;">Not chosen yet.</p>`}
+      <button type="button" class="primary-btn" style="margin-top:8px;" onclick="app.openPicker('censorDomain')">${c.censorDomain?'Change':'Choose'} Domain</button>
+      ${domainData ? `
+        <p class="array-hint" style="margin-top:8px;">1st-level feature: ${escapeHtml(domainData.firstLevelFeature)}</p>
+        <p class="array-hint">Grants a skill from: ${escapeHtml(domainData.skillGroup)}</p>
+        ${renderLeveledFeatureList(domainData, Number(c.level)||1)}
+      ` : ''}
+    </div>
   </div>`;
 }
 
@@ -14930,6 +15578,7 @@ function renderAbilities(c){
   return `
     ${startPrompt}
     ${renderSubclassFeatureCard(c)}
+    ${renderCensorDomainCard(c)}
     <div class="abilities-header">
       <span class="h-label">${c.abilities.length} Abilit${c.abilities.length===1?'y':'ies'}</span>
       <div class="abilities-header-actions">
@@ -14975,11 +15624,16 @@ function renderRollBlock(a, c){
   const resourceName = clsData ? clsData.resource : null;
   const cost = Number(a.cost);
   const canSpend = resourceName && cost > 0;
+  // task #148: mirror the Director-side Malice guard for the player's own
+  // Heroic Resource -- a click that would drive resourceCurrent negative
+  // gets greyed out and relabeled instead of silently clamping to 0.
+  const currentResource = Number(c.resourceCurrent) || 0;
+  const canAffordResource = !canSpend || cost <= currentResource;
   return `
   <div class="roll-block">
     <div class="roll-row">
       <button type="button" class="roll-btn" onclick="app.rollAbility('${a.id}')">🎲 Roll Power</button>
-      ${canSpend ? `<button type="button" class="roll-btn spend-btn" onclick="app.spendResourceOn('${a.id}')">− Spend ${cost} ${escapeHtml(resourceName)}</button>` : ''}
+      ${canSpend ? `<button type="button" class="roll-btn spend-btn" ${canAffordResource?'':'disabled title="Not enough '+escapeAttr(resourceName)+'"'} onclick="app.spendResourceOn('${a.id}')">− ${canAffordResource?`Spend ${cost} ${escapeHtml(resourceName)}`:`Not enough ${escapeHtml(resourceName)}`}</button>` : ''}
       ${roll ? `<span class="roll-result tier-${roll.tier}">${roll.d1} + ${roll.d2}${roll.charKey?` ${roll.charVal>=0?'+':''}${roll.charVal} (${roll.charKey.slice(0,1).toUpperCase()})`:''} = <strong>${roll.total}</strong> — Tier ${roll.tier}${roll.tier===1?' (≤11)':roll.tier===2?' (12–16)':' (17+)'}</span>` : ''}
     </div>
     ${roll ? `<div class="char-chip-row">${chips}</div>` : ''}
@@ -15361,6 +16015,19 @@ function renderLevelUpModal(c){
 function renderModal(){
   let modalRoot = document.getElementById('modal-root');
   if(!modalRoot){ modalRoot = document.createElement('div'); modalRoot.id='modal-root'; document.getElementById('app').appendChild(modalRoot); }
+  // Scroll-position guard, same fix as renderMain(): whichever branch below
+  // ends up replacing modalRoot.innerHTML, restore the open picker list's
+  // scroll offset afterward so repeatedly tapping items in a long list
+  // (ancestry traits, subclass options, skills, etc.) doesn't keep snapping
+  // the list back to its top item.
+  const __prevGridEl = modalRoot.querySelector('.picker-grid, .modal-scroll-body');
+  const __prevGridScroll = __prevGridEl ? __prevGridEl.scrollTop : 0;
+  if(__prevGridScroll){
+    requestAnimationFrame(() => {
+      const el = modalRoot.querySelector('.picker-grid, .modal-scroll-body');
+      if(el) el.scrollTop = __prevGridScroll;
+    });
+  }
   if(state.assignItemHeroId){ modalRoot.innerHTML = renderAssignItemModal(state.assignItemHeroId); return; }
   if(state.grantTitleHeroId){ modalRoot.innerHTML = renderGrantTitleModal(state.grantTitleHeroId); return; }
   if(state.levelUpFlow && state.current){ modalRoot.innerHTML = renderLevelUpModal(state.current); return; }
@@ -15370,6 +16037,8 @@ function renderModal(){
   if(type==='encounterBuilder'){ modalRoot.innerHTML = renderEncounterBuilderModal(); return; }
   if(!state.current){ modalRoot.innerHTML=''; return; }
   if(type==='subclass'){ modalRoot.innerHTML = renderSubclassModal(state.current); return; }
+  if(type==='censorDomain'){ modalRoot.innerHTML = renderCensorDomainModal(state.current); return; }
+  if(type==='deity'){ modalRoot.innerHTML = renderDeityModal(state.current); return; }
   if(type==='ancestryTrait'){ modalRoot.innerHTML = renderAncestryTraitModal(state.current); return; }
   if(type==='culture_environment'||type==='culture_organization'||type==='culture_upbringing'){ modalRoot.innerHTML = renderCultureModal(type.replace('culture_','')); return; }
   if(type==='title'){ modalRoot.innerHTML = renderTitlesModal(state.current); return; }
@@ -15448,6 +16117,55 @@ function renderSubclassModal(c){
     </div>
   </div>`;
 }
+function renderCensorDomainModal(c){
+  const chosen = c.censorDomain || '';
+  return `
+  <div class="modal-backdrop" onclick="app.closePicker()">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>Choose Domain</h2><button class="modal-close" onclick="app.closePicker()">✕</button></div>
+      <div class="modal-note">Any of the twelve domains is a valid pick regardless of your deity's usual portfolio — the book treats that portfolio as a guideline, not a hard restriction.</div>
+      <div class="picker-grid">
+        ${CENSOR_DOMAINS.map(o=>{
+          const isChosen = o.name === chosen;
+          return `
+          <div class="picker-card" style="${isChosen?'border-color:var(--forge);':''}" onclick="app.chooseCensorDomain('${escapeAttr(o.name)}')">
+            <div class="picker-card-name">${escapeHtml(o.name)}${isChosen?' ✓':''}</div>
+            <div class="picker-card-tagline">1st: ${escapeHtml(o.firstLevelFeature)} · skill from ${escapeHtml(o.skillGroup)}</div>
+            <div class="picker-card-desc">${escapeHtml(o.blurb)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+function renderDeityModal(c){
+  const chosen = c.deity || '';
+  const deities = DEITIES_AND_SAINTS.filter(d=>d.type==='deity');
+  const saints = DEITIES_AND_SAINTS.filter(d=>d.type==='saint');
+  const cardFor = (o) => {
+    const isChosen = o.name === chosen;
+    return `
+      <div class="picker-card" style="${isChosen?'border-color:var(--forge);':''}" onclick="app.chooseDeity('${escapeAttr(o.name)}')">
+        <div class="picker-card-name">${escapeHtml(o.name)}${isChosen?' ✓':''}</div>
+        <div class="picker-card-tagline">${escapeHtml(o.domains.join(', '))}</div>
+      </div>`;
+  };
+  return `
+  <div class="modal-backdrop" onclick="app.closePicker()">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>Choose a Deity or Saint</h2><button class="modal-close" onclick="app.closePicker()">✕</button></div>
+      <div class="modal-note">From Chapter 14: Gods and Religion — names and domain portfolios only. Ask your Director about deities specific to your campaign world, or use a homebrew name below; either is just as valid as this list.</div>
+      <div style="padding:14px 22px 4px;"><span class="h-label">Deities</span></div>
+      <div class="picker-grid picker-grid-wide" style="padding-top:0;">${deities.map(cardFor).join('')}</div>
+      <div style="padding:14px 22px 4px;"><span class="h-label">Saints</span></div>
+      <div class="picker-grid picker-grid-wide" style="padding-top:0;">${saints.map(cardFor).join('')}</div>
+      <div style="padding:4px 22px 20px;">
+        <label class="h-label" style="margin-bottom:6px;display:block;">Or a homebrew / campaign-specific name</label>
+        <input type="text" placeholder="Type a name and press Enter…" style="width:100%;" onkeydown="if(event.key==='Enter'){app.chooseDeity(event.target.value.trim());}">
+      </div>
+    </div>
+  </div>`;
+}
 function renderAncestryTraitModal(c){
   const data = ancestryTraitDataFor(c);
   if(!data) return '';
@@ -15466,10 +16184,11 @@ function renderAncestryTraitModal(c){
           const afford = spent + t.cost <= budget;
           const dim = !owned && !afford;
           return `
-          <div class="picker-card" style="${owned?'border-color:var(--forge);':''}${dim?'opacity:0.45;':''}" onclick="app.toggleAncestryTrait('${escapeAttr(t.name)}', ${t.cost})">
+          <div class="picker-card" style="${owned?'border-color:var(--forge);':''}${dim?'opacity:0.45;cursor:not-allowed;':''}" ${dim?'':`onclick="app.toggleAncestryTrait('${escapeAttr(t.name)}', ${t.cost})"`}>
             <div class="picker-card-name">${escapeHtml(t.name)} <span style="color:var(--forge);font-family:'JetBrains Mono';font-size:12px;">${t.cost} pt${t.cost>1?'s':''}</span>${owned?' ✓':''}</div>
             ${t.prereq?`<div class="picker-card-tagline">Requires: ${escapeHtml(t.prereq)}</div>`:''}
             <div class="picker-card-desc">${escapeHtml(t.summary)}</div>
+            ${dim?'<div class="picker-card-tagline" style="color:var(--forge);">Not enough points left</div>':''}
           </div>`;
         }).join('')}
       </div>
@@ -15570,19 +16289,31 @@ function renderClassAbilityModal(c){
       return na - nb;
     }).map(key=>({ key, items: tiers[key] }));
   }
+  // task #147: cards default to collapsed (name + tags + Add button only) --
+  // tapping the header reveals the full tier table. On a phone, a picker
+  // grid of a dozen-plus abilities all fully expanded is a wall of text with
+  // no way to scan for the one you want; collapsed-by-default mirrors the
+  // same pattern already used for the Abilities tab's own ability rows.
   function cardHtml(ability, kind){
     const added = addedNames.has(ability.name);
     const dim = ability.minLevel && ability.minLevel > c.level;
+    const key = kind + '::' + ability.name;
+    const cardExpanded = state.expandedPickerAbilities.has(key);
     const tags = [];
     if(ability.subclassGroup) tags.push(ability.subclassGroup);
     if(ability.minLevel) tags.push('Lvl '+ability.minLevel+'+');
     const tagline = [ability.actionType, (ability.keywords||[]).join(', '), ability.distance].filter(Boolean).join(' · ');
     return `
-    <div class="picker-card pick-card" style="${added?'border-color:var(--forge);':''}${(dim&&!added)?'opacity:0.6;':''}">
-      <div class="picker-card-name">${escapeHtml(ability.name)}${added?' ✓':''}</div>
-      ${tagline?`<div class="picker-card-tagline">${escapeHtml(tagline)}</div>`:''}
+    <div class="picker-card pick-card ${cardExpanded?'expanded':''}" style="${added?'border-color:var(--forge);':''}${(dim&&!added)?'opacity:0.6;':''}">
+      <button type="button" class="ability-row-head" style="padding:0;margin:0 0 6px;" onclick="event.stopPropagation();app.toggleAbilityPickCard('${escapeAttr(key)}')">
+        <span style="flex:1;min-width:0;text-align:left;">
+          <span class="picker-card-name" style="display:block;white-space:normal;">${escapeHtml(ability.name)}${added?' ✓':''}</span>
+          ${tagline?`<span class="picker-card-tagline" style="display:block;">${escapeHtml(tagline)}</span>`:''}
+        </span>
+        <span class="ability-row-caret">${cardExpanded?'▾':'▸'}</span>
+      </button>
       ${tags.length?`<div class="resource-pill">${escapeHtml(tags.join(' · '))}</div>`:''}
-      ${renderEffectDisplay(ability.effect||'')}
+      ${cardExpanded ? renderEffectDisplay(ability.effect||'') : ''}
       <button type="button" class="pick-card-btn${added?' added':''}" onclick="event.stopPropagation();app.toggleClassAbility('${kind}','${escapeAttr(ability.name)}')">${added?'✓ Added — tap to remove':'+ Add this ability'}</button>
     </div>`;
   }
