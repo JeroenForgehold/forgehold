@@ -11465,13 +11465,27 @@ function tierTextFor(effect, tierNum){
   return t ? t.text : '';
 }
 // Best-effort only: catches the common "N damage" / "N + Characteristic
-// damage" phrasing and returns the flat N as a starting suggestion. Dice
-// notation ("2d6 damage"), condition-only tiers, and anything else it
-// doesn't recognize are left blank on purpose rather than guessed at --
-// the player always sees and can overwrite this before it's applied.
+// damage" phrasing and returns the flat N as a starting suggestion. Neither
+// path adds a characteristic bonus automatically -- the text might name a
+// different characteristic than whichever one the player added to their
+// power roll for tier purposes, and guessing which one applies here risks
+// a wrong number that looks authoritative. The player always sees the
+// result and can add their own modifier before applying it.
+//
+// Dice notation (task #150): rolling the named dice is not a guess, it's
+// the actual result a player would get doing it by hand -- so unlike a
+// flat-number guess, this is safe to do automatically. Condition-only
+// tiers with no damage at all still correctly return ''.
 function suggestDamageFromText(text){
   if(!text) return '';
-  if(/\d+\s*d\s*\d+/i.test(text)) return ''; // dice notation (e.g. "2d6 damage") -- never reduce that to a flat guess
+  const diceMatch = /(\d+)\s*d\s*(\d+)/i.exec(text);
+  if(diceMatch){
+    const count = Math.max(1, Number(diceMatch[1]) || 1);
+    const sides = Math.max(2, Number(diceMatch[2]) || 6);
+    let total = 0;
+    for(let i=0;i<count;i++) total += 1 + Math.floor(Math.random()*sides);
+    return String(total);
+  }
   const m = /(\d+)\s*(?:\+\s*\w+\s*)?damage/i.exec(text);
   return m ? m[1] : '';
 }
@@ -11900,6 +11914,9 @@ const state = {
   pickerOpen: null,        // null | 'ancestry' | 'career' | 'class'
   expandedAbilityIds: new Set(),  // UI-only: which ability rows are expanded, not persisted
   expandedPickerAbilities: new Set(), // UI-only: which cards in the Choose Abilities picker (task #147) show full effect text
+  abilityTargetChoice: {},  // UI-only: last-picked enemy target id per ability id (task #149 -- keeps the select from resetting to the first option on re-render)
+  abilityDamageOverride: {}, // UI-only: player's own edit to the Apply Damage input, if any (task #150 -- same uncontrolled-input problem as #149)
+  expandedEffectEditors: new Set(), // UI-only: which ability rows show the raw Effect textarea (task #151)
   rollResults: {},          // UI-only: last dice roll per ability id, not persisted
 
   // --- Encounter Runner (0006_combat.sql) -- all UI-only / polled cache,
@@ -12617,6 +12634,23 @@ const app = {
     state.monsterAbilityTarget[abilityId] = heroId;
     render();
   },
+  // task #149: the enemy-target <select> in a hero's own ability row has no
+  // persisted value, so a plain uncontrolled <select> snaps back to its
+  // first <option> on every re-render (which fires on nearly every other
+  // click on the page, not just this one). Track the pick in state and
+  // render it back as the selected option so it survives.
+  setAbilityTarget(abilityId, monsterId){
+    state.abilityTargetChoice[abilityId] = monsterId;
+    // No render() here on purpose -- this only needs to survive the *next*
+    // unrelated re-render, and re-rendering immediately would be one more
+    // pointless full-row rebuild for a change that doesn't affect anything
+    // else on screen.
+  },
+  toggleEffectEditor(abilityId){
+    if(state.expandedEffectEditors.has(abilityId)) state.expandedEffectEditors.delete(abilityId);
+    else state.expandedEffectEditors.add(abilityId);
+    render();
+  },
   openAssignItem(heroId){ state.assignItemHeroId = heroId; render(); },
   closeAssignItem(){ state.assignItemHeroId = null; render(); },
   openGrantTitle(heroId){ state.grantTitleHeroId = heroId; render(); },
@@ -12927,7 +12961,21 @@ const app = {
   },
   updateAbility(e, id, field){
     const a = state.current.abilities.find(x=>x.id===id);
-    if(a){ a[field] = e.target.value; scheduleSave(); }
+    if(!a) return;
+    a[field] = e.target.value;
+    // task #152: Cost has to stay freetext (values genuinely vary per
+    // ability -- "3 Piety", "1 Malice", a plain number, etc. -- so it can't
+    // become a fixed picker), but picking a Type that implies an obvious
+    // cost is a good moment to fill Cost in for the player instead of
+    // leaving two fields they have to separately figure out. Only applies
+    // when Cost is still blank, so it never overwrites something they
+    // already typed.
+    let costAutoSet = false;
+    if(field === 'type' && !a.cost){
+      if(a.type === 'Free Triggered Action' || a.type === 'Free Maneuver'){ a.cost = 'Free'; costAutoSet = true; }
+    }
+    scheduleSave();
+    if(costAutoSet) renderMain(); // reflect the auto-filled Cost input immediately
   },
   toggleAbilityExpand(id){
     if(state.expandedAbilityIds.has(id)) state.expandedAbilityIds.delete(id);
@@ -12942,13 +12990,22 @@ const app = {
     const autoKey = a ? detectRollCharacteristic(a.effect) : null;
     const autoVal = (autoKey && c && c.characteristics && c.characteristics[autoKey]) || 0;
     const total = d1 + d2 + (autoKey ? autoVal : 0);
-    state.rollResults[id] = { d1, d2, charKey: autoKey, charVal: autoKey ? autoVal : 0, total, tier: tierFor(total), auto: !!autoKey };
+    const tier = tierFor(total);
+    state.rollResults[id] = { d1, d2, charKey: autoKey, charVal: autoKey ? autoVal : 0, total, tier, auto: !!autoKey };
+    // task #150: roll (not guess) the tier's damage dice once, right here,
+    // rather than recomputing on every unrelated re-render -- see
+    // suggestDamageFromText's comment for why re-rolling on every render
+    // was wrong (it would silently change the number, or blow away a
+    // manual edit, behind the player's back).
+    state.rollResults[id].damageSuggestion = a ? suggestDamageFromText(tierTextFor(a.effect, tier)) : '';
+    delete state.abilityDamageOverride[id];
     renderMain();
   },
   addCharToRoll(id, key){
     const roll = state.rollResults[id];
     if(!roll) return;
     const c = state.current;
+    const a = c && c.abilities.find(x=>x.id===id);
     const val = (c && c.characteristics && c.characteristics[key]) || 0;
     if(roll.charKey === key){
       roll.charKey = null; roll.charVal = 0; roll.total = roll.d1 + roll.d2;
@@ -12956,7 +13013,14 @@ const app = {
       roll.charKey = key; roll.charVal = val; roll.total = roll.d1 + roll.d2 + val;
     }
     roll.tier = tierFor(roll.total);
+    roll.damageSuggestion = a ? suggestDamageFromText(tierTextFor(a.effect, roll.tier)) : '';
+    delete state.abilityDamageOverride[id];
     renderMain();
+  },
+  setAbilityDamageOverride(e, abilityId){
+    state.abilityDamageOverride[abilityId] = e.target.value;
+    // No render() -- same reasoning as setAbilityTarget: only needs to
+    // survive the next unrelated re-render, not trigger one itself.
   },
   bumpStamina(delta){
     const c = state.current; if(!c) return;
@@ -13293,6 +13357,7 @@ function renderCombatTab(c){
     </div>
     ${abilities.length===0 ? `<div class="abilities-empty">No abilities added yet -- add them on the Abilities tab.</div>` : ''}
     ${abilities.map(a=>abilityRowHtml(a, c)).join('')}
+    ${freeStrikeAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
   `;
 }
 
@@ -15562,6 +15627,37 @@ function renderSubclassFeatureCard(c){
   </div>`;
 }
 
+// task #153: every hero can fall back on a Free Strike regardless of class
+// or kit -- Heroes rulebook Ch.10, p.275. Numbers and keywords are read
+// from UNIVERSAL_ACTIONS (already extracted, task #24); the effect text
+// below is written fresh in the app's own tiered-table format rather than
+// copied from the book, matching the app's copyright posture. Synthesized
+// fresh each call rather than stored on the hero -- these aren't part of
+// c.abilities, so there's nothing to migrate on existing heroes and no risk
+// of a stale copy drifting from the verified data.
+function freeStrikeAbilities(c){
+  // ids are suffixed with the hero id (not just a fixed string) so that
+  // per-ability UI state (state.rollResults, expandedAbilityIds, target
+  // choice, damage override) doesn't bleed between different heroes in the
+  // same browser session -- real abilities avoid this naturally because
+  // abilityId() always generates a fresh random id, but these are
+  // synthesized fresh on every render rather than stored, so they need a
+  // stable-per-hero id instead.
+  const meleeSrc = UNIVERSAL_ACTIONS.actions.find(x=>x.name==='Melee Weapon Free Strike');
+  const rangedSrc = UNIVERSAL_ACTIONS.actions.find(x=>x.name==='Ranged Weapon Free Strike');
+  const suffix = c && c.id ? c.id : 'default';
+  const mk = (kind, name, distance, dmg) => ({
+    id: `freestrike-${kind}-${suffix}`, name, type:'Main Action', cost:'',
+    keywords: 'Strike, Weapon' + (kind==='melee' ? ', Melee, Charge' : ', Ranged'),
+    distance, target: 'One creature or object',
+    effect: `Power roll -- add your Might or Agility, whichever you're using for this strike. Tier 1 (11-): ${dmg[0]} damage. Tier 2 (12-16): ${dmg[1]} damage. Tier 3 (17+): ${dmg[2]} damage.`,
+    _src: 'universal', _synthetic: true,
+  });
+  return [
+    mk('melee', meleeSrc ? meleeSrc.name : 'Melee Weapon Free Strike', 'Melee 1', [2,5,7]),
+    mk('ranged', rangedSrc ? rangedSrc.name : 'Ranged Weapon Free Strike', 'Ranged 5', [2,4,6]),
+  ];
+}
 function renderAbilities(c){
   const clsData = ABILITIES.classes[c.class];
   const hasClassAbilities = c.abilities.some(a=>a._src==='class');
@@ -15589,6 +15685,7 @@ function renderAbilities(c){
     ${!clsData ? `<p class="array-hint" style="margin:-8px 0 14px;">${c.class ? `No captured ability list for ${escapeHtml(c.class)} yet — add abilities by hand below, or see Chapter 5 in your rulebook.` : 'Choose a class on the Overview tab to unlock its signature and heroic ability list here.'}</p>` : ''}
     ${c.abilities.length===0 ? `<div class="abilities-empty">No abilities yet. Tap "+ ${clsData?escapeHtml(c.class):'Custom'}" above to add your first one.</div>` : ''}
     ${c.abilities.map(a=>abilityRowHtml(a, c)).join('')}
+    ${freeStrikeAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
     ${renderUniversalActionsCard()}
   `;
 }
@@ -15802,7 +15899,17 @@ function abilityRowHtml(a, c){
   const achievedTier = state.rollResults[a.id] ? state.rollResults[a.id].tier : null;
   const defaultGrant = (achievedTier && /tier/i.test(trailText)) ? achievedTier : 1;
   const enemyTargets = (inCombat && state.activeCombat) ? (state.activeCombat.monsters || []) : [];
-  const damageSuggestion = achievedTier ? suggestDamageFromText(tierTextFor(a.effect, achievedTier)) : '';
+  // task #150: read the damage number rolled once in rollAbility/addCharToRoll
+  // rather than recomputing (and re-rolling dice) on every render; task #149's
+  // same pattern applies here too via abilityDamageOverride for the player's
+  // own edits.
+  const rollForTier = state.rollResults[a.id];
+  const frozenDamageSuggestion = (rollForTier && rollForTier.damageSuggestion !== undefined) ? rollForTier.damageSuggestion : '';
+  const damageSuggestion = (state.abilityDamageOverride[a.id] !== undefined) ? state.abilityDamageOverride[a.id] : frozenDamageSuggestion;
+  // task #149: keep whatever the player last picked, defaulting to it only
+  // if it's still a valid target in this fight; otherwise fall back to the
+  // first tracked enemy so the control always shows a real selection.
+  const chosenTargetId = (enemyTargets.some(m=>m.id===state.abilityTargetChoice[a.id])) ? state.abilityTargetChoice[a.id] : (enemyTargets[0] && enemyTargets[0].id);
   return `
   <div class="ability-row ${expanded?'expanded':''}">
     <button type="button" class="ability-row-head" onclick="app.toggleAbilityExpand('${a.id}')">
@@ -15815,6 +15922,9 @@ function abilityRowHtml(a, c){
     </button>
     ${expanded ? `
     <div class="ability-row-body">
+      ${a._synthetic ? `
+      <p class="array-hint" style="margin:0 0 8px;">Universal action -- every hero can do this, kit or class abilities aside. ${escapeHtml(a.keywords||'')}${a.distance?` · ${escapeHtml(a.distance)}`:''}${a.target?` · ${escapeHtml(a.target)}`:''}</p>
+      ` : `
       <div class="ability-edit-grid">
         <div class="field"><label>Name</label><input type="text" value="${escapeAttr(a.name)}" oninput="app.updateAbility(event,'${a.id}','name')" placeholder="Ability name"></div>
         <div class="field"><label>Type</label>
@@ -15827,7 +15937,7 @@ function abilityRowHtml(a, c){
         <div class="field"><label>Keywords</label><input type="text" value="${escapeAttr(a.keywords)}" oninput="app.updateAbility(event,'${a.id}','keywords')" placeholder="Magic, Weapon…"></div>
         <div class="field"><label>Distance</label><input type="text" value="${escapeAttr(a.distance)}" oninput="app.updateAbility(event,'${a.id}','distance')" placeholder="Melee 1, Ranged 5…"></div>
         <div class="field"><label>Target</label><input type="text" value="${escapeAttr(a.target)}" oninput="app.updateAbility(event,'${a.id}','target')" placeholder="One creature…"></div>
-      </div>
+      </div>`}
       ${a.effect ? `<div class="tier-preview">${renderEffectDisplay(a.effect, state.rollResults[a.id] ? state.rollResults[a.id].tier : null, true)}</div>` : ''}
       ${(inCombat && trailText) ? `
       <div class="kit-card" style="margin:10px 0;padding:10px 12px;">
@@ -15846,18 +15956,33 @@ function abilityRowHtml(a, c){
         <span class="h-label" style="margin:0;">Apply to a Target</span>
         ${enemyTargets.length ? `
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-          <select id="enemy-pick-${a.id}" class="hs-edit-btn" style="margin:0;">
-            ${enemyTargets.map(m=>`<option value="${escapeAttr(m.id)}">${escapeHtml(monsterTargetLabel(m))}</option>`).join('')}
+          <select id="enemy-pick-${a.id}" class="hs-edit-btn" style="margin:0;" onchange="app.setAbilityTarget('${a.id}', this.value)">
+            ${enemyTargets.map(m=>`<option value="${escapeAttr(m.id)}" ${m.id===chosenTargetId?'selected':''}>${escapeHtml(monsterTargetLabel(m))}</option>`).join('')}
           </select>
-          <input id="enemy-dmg-${a.id}" type="number" min="0" value="${escapeAttr(damageSuggestion)}" style="width:64px;" placeholder="Dmg" title="Damage to subtract">
+          <input id="enemy-dmg-${a.id}" type="number" min="0" value="${escapeAttr(damageSuggestion)}" style="width:64px;" placeholder="Dmg" title="Damage to subtract" oninput="app.setAbilityDamageOverride(event,'${a.id}')">
           <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.applyAbilityDamage('${a.id}', document.getElementById('enemy-pick-${a.id}').value, document.getElementById('enemy-dmg-${a.id}').value)">Apply Damage</button>
         </div>
-        <p class="array-hint" style="margin-top:6px;">Starting number is read from the achieved tier where it can be -- check it against the effect text above, especially for dice damage, before applying.</p>
+        <p class="array-hint" style="margin-top:6px;">Starting number comes from the achieved tier -- dice are rolled automatically, flat bonuses (like "+ Might") are not added for you. Check it against the effect text above before applying.</p>
         ` : `<p class="array-hint" style="margin-top:6px;">No tracked enemies in this fight yet.</p>`}
       </div>` : ''}
-      <div class="field"><label>Effect${a.effect && parseTieredEffect(a.effect) ? ' (edit raw text)' : ''}</label><textarea oninput="app.updateAbility(event,'${a.id}','effect')" placeholder="Power roll, effect text, tier results…">${escapeHtml(a.effect)}</textarea></div>
+      ${(() => {
+        // task #151: the raw Effect textarea duplicates the parsed tier-preview
+        // shown above whenever there IS a clean parse -- showing both, fully
+        // expanded, on every ability was pure clutter. Collapse the raw box
+        // behind a toggle in that case; when nothing parsed, there's no other
+        // display of the text, so show the box outright (nothing to declutter).
+        if(a._synthetic) return ''; // nothing to edit on a universal action
+        const hasParsedDisplay = !!(a.effect && parseTieredEffect(a.effect));
+        const editorOpen = !hasParsedDisplay || state.expandedEffectEditors.has(a.id);
+        const textarea = `<textarea oninput="app.updateAbility(event,'${a.id}','effect')" placeholder="Power roll, effect text, tier results…">${escapeHtml(a.effect)}</textarea>`;
+        if(!hasParsedDisplay) return `<div class="field"><label>Effect</label>${textarea}</div>`;
+        return `<div class="field">
+          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="app.toggleEffectEditor('${a.id}')">Effect (raw text) <span class="ability-row-caret">${editorOpen?'▾':'▸'}</span></label>
+          ${editorOpen ? textarea : ''}
+        </div>`;
+      })()}
       ${renderRollBlock(a, c)}
-      <button type="button" class="ability-remove-btn" onclick="app.removeAbility('${a.id}')">✕ Remove Ability</button>
+      ${a._synthetic ? '' : `<button type="button" class="ability-remove-btn" onclick="app.removeAbility('${a.id}')">✕ Remove Ability</button>`}
     </div>` : ''}
   </div>`;
 }
