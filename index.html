@@ -13704,7 +13704,7 @@ function renderCampaignView(){
       ${renderViewModeToggle()}
       <div class="campaign-header">
         <h1>${escapeHtml(camp ? camp.name : 'Campaign')}</h1>
-        <p>Every hero published to this campaign, visible to your whole group. Set a hero's Campaign field on its Overview tab to publish it here.</p>
+        <p>Every hero published to this campaign, visible to your whole group. Set a hero's Campaign field on its Edit Hero tab to publish it here.</p>
         ${camp && camp.invite_code ? `<p>Invite code: <strong>${escapeHtml(camp.invite_code)}</strong> — share this with your table so they can join.</p>` : ''}
       </div>
       ${heroes.length ? `<div class="campaign-grid">${heroes.map(h=>`
@@ -15211,7 +15211,7 @@ function renderHome(c){
     <div class="feature-pills" style="margin-top:8px;">
       ${langs.map(l=>`<span class="feature-pill">${escapeHtml(l)}</span>`).join('')}
     </div>
-    <p class="array-hint" style="margin-top:8px;">Caelian is automatic. Manage your Culture and Career language picks on the Overview tab.</p>
+    <p class="array-hint" style="margin-top:8px;">Caelian is automatic. Manage your Culture and Career language picks on Edit Hero.</p>
   </div>
 
   ${renderSubclassCard(c)}
@@ -15724,7 +15724,7 @@ function renderCultureModal(aspectKey){
   <div class="modal-backdrop" onclick="app.closePicker()">
     <div class="modal-panel" onclick="event.stopPropagation()">
       <div class="modal-header"><h2>Choose ${escapeHtml(aspect.label)}</h2><button class="modal-close" onclick="app.closePicker()">✕</button></div>
-      <div class="modal-note">Tap an option to select it. You'll pick the specific granted skill afterward on the Overview tab.</div>
+      <div class="modal-note">Tap an option to select it. You'll pick the specific granted skill afterward on Edit Hero.</div>
       <div class="picker-grid">
         ${aspect.options.map(o=>{
           const isChosen = o.name===chosenName;
@@ -15749,7 +15749,7 @@ function renderSkills(c){
   const career = findCareerData(c.career);
   return `
     <p style="color:var(--text-faint);font-size:12.5px;margin:-4px 0 16px;max-width:680px;line-height:1.5;">
-      Check the box to mark a skill trained. Skills come from your Class and Career Quick Builds and your Culture picks (Overview tab) — rename or remove a row if your table plays it differently.
+      Check the box to mark a skill trained. Skills come from your Class and Career Quick Builds and your Culture picks (Edit Hero) — rename or remove a row if your table plays it differently.
     </p>
     ${(cls || career) ? `<div class="quickbuild-bar">
       ${cls ? `<div class="quickbuild-item"><span class="h-label">${escapeHtml(cls.name)} grants</span><p>${escapeHtml(cls.skills.chooseText)}</p><button class="primary-btn" onclick="app.applyQuickBuild('class')">Apply Class Quick Build</button></div>` : ''}
@@ -15826,7 +15826,7 @@ function renderSubclassFeatureCard(c){
         ${renderLeveledFeatureList(o, heroLevel)}
       </div>
     `).join('')}
-    <p class="array-hint" style="margin-top:10px;">Manage your ${escapeHtml(data.subclassLabel)} choice on the Overview tab — see Chapter 5 for full feature text.</p>
+    <p class="array-hint" style="margin-top:10px;">Manage your ${escapeHtml(data.subclassLabel)} choice on Edit Hero — see Chapter 5 for full feature text.</p>
   </div>`;
 }
 
@@ -15885,7 +15885,7 @@ function renderAbilities(c){
         <button class="primary-btn secondary" onclick="app.addAbility()">+ Custom</button>
       </div>
     </div>
-    ${!clsData ? `<p class="array-hint" style="margin:-8px 0 14px;">${c.class ? `No captured ability list for ${escapeHtml(c.class)} yet — add abilities by hand below, or see Chapter 5 in your rulebook.` : 'Choose a class on the Overview tab to unlock its signature and heroic ability list here.'}</p>` : ''}
+    ${!clsData ? `<p class="array-hint" style="margin:-8px 0 14px;">${c.class ? `No captured ability list for ${escapeHtml(c.class)} yet — add abilities by hand below, or see Chapter 5 in your rulebook.` : 'Choose a class on Edit Hero to unlock its signature and heroic ability list here.'}</p>` : ''}
     ${c.abilities.length===0 ? `<div class="abilities-empty">No abilities yet. Tap "+ ${clsData?escapeHtml(c.class):'Custom'}" above to add your first one.</div>` : ''}
     ${c.abilities.map(a=>abilityRowHtml(a, c)).join('')}
     ${freeStrikeAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
