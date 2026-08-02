@@ -321,6 +321,12 @@ button{cursor:pointer;}
 .status-tag{display:inline-block;font-size:9.5px;letter-spacing:0.6px;text-transform:uppercase;padding:1px 6px;border-radius:8px;vertical-align:middle;}
 .status-tag.status-winded{background:var(--forge-glow);color:var(--forge);border:1px solid var(--forge-dim);}
 .status-tag.status-dying{background:rgba(224,82,82,0.16);color:var(--danger);border:1px solid var(--danger);}
+.condition-tag{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;letter-spacing:0.4px;text-transform:uppercase;padding:2px 7px;border-radius:8px;background:rgba(168,120,224,0.14);color:#c9a8f0;border:1px solid rgba(168,120,224,0.4);white-space:nowrap;}
+.condition-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+.condition-x{cursor:pointer;opacity:0.7;}
+.condition-x:hover{opacity:1;}
+.condition-add-form{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;padding:8px 10px;background:var(--bg-panel);border:1px solid var(--line-soft);border-radius:2px;}
+.condition-add-form select,.condition-add-form input{font-family:'JetBrains Mono';font-size:12px;background:var(--bg-raised);border:1px solid var(--line-soft);color:var(--text);padding:4px 6px;border-radius:2px;}
 .malice-cost-pill{background:var(--forge);color:#1a1005;border-color:var(--forge);font-weight:700;}
 .picker-card.custom{border-style:dashed;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text-faint);font-family:'Bitter',serif;font-weight:600;letter-spacing:1px;text-transform:uppercase;font-size:12.5px;}
 .picker-card.custom:hover{color:var(--forge);}
@@ -11258,7 +11264,11 @@ function heroToRow(c){
   return { id, campaign_id: campaignId || null, data: rest };
 }
 function rowToHero(row){
-  return { ...row.data, id: row.id, campaignId: row.campaign_id || '' };
+  // Defensive normalization: a hero saved mid-wizard (or hand-edited) can end up
+  // with level as '' or missing entirely. Every render site downstream assumes a
+  // real number (Home's level medal, the topbar Level field, Level Up math), so
+  // fix it once here rather than patching each call site.
+  return { ...row.data, id: row.id, campaignId: row.campaign_id || '', level: Number(row.data && row.data.level) || 1 };
 }
 
 async function loadMyRoster(){
@@ -11433,6 +11443,18 @@ async function combatSurgeAdjustRemote(campaignId, heroId, delta){
   if(error){ alert('Could not update surges: ' + error.message); return null; }
   return data ? data.data : null;
 }
+// Replaces the WHOLE conditions array for one hero (task #163) -- the
+// client always has the current array already rendered, so append/remove/
+// roll-a-save all happen locally and this just persists the result. Any
+// campaign member may call it, same reasoning as surges: the Director is
+// usually the one applying a condition (resolving a monster ability), but
+// the affected player needs to clear their own the moment they roll a
+// successful save, without waiting on the Director to be free to click.
+async function combatHeroConditionsSetRemote(campaignId, heroId, conditions){
+  const { data, error } = await sb.rpc('combat_hero_conditions_set', { p_campaign_id: campaignId, p_hero_id: heroId, p_conditions: conditions||[] });
+  if(error){ alert('Could not update conditions: ' + error.message); return null; }
+  return data ? data.data : null;
+}
 // Any campaign member can subtract damage from a tracked monster or minion
 // squad pool -- not just the Director -- since the usual case is a player
 // rolling their own attack digitally and wanting it to land immediately
@@ -11484,7 +11506,7 @@ function tierTextFor(effect, tierNum){
 // the actual result a player would get doing it by hand -- so unlike a
 // flat-number guess, this is safe to do automatically. Condition-only
 // tiers with no damage at all still correctly return ''.
-function suggestDamageFromText(text){
+function suggestDamageFromText(text, hero){
   if(!text) return '';
   const diceMatch = /(\d+)\s*d\s*(\d+)/i.exec(text);
   if(diceMatch){
@@ -11493,6 +11515,20 @@ function suggestDamageFromText(text){
     let total = 0;
     for(let i=0;i<count;i++) total += 1 + Math.floor(Math.random()*sides);
     return String(total);
+  }
+  // Ability text is written "N + Characteristic damage" (e.g. "7 + Agility
+  // psychic damage") -- the base number alone undersells the roll, since
+  // that "+ Characteristic" is the hero's actual score, not flavor text.
+  // Match the characteristic name and, if we have the hero on hand, add
+  // their real score for it -- falls back to the bare base number for any
+  // caller that doesn't pass a hero, so nothing that used the old
+  // signature breaks.
+  const charMatch = /(\d+)\s*\+\s*(Might|Agility|Reason|Intuition|Presence)\b[^,.;]*?damage/i.exec(text);
+  if(charMatch){
+    const base = Number(charMatch[1]) || 0;
+    const key = charMatch[2].toLowerCase();
+    const mod = hero && hero.characteristics ? Number(hero.characteristics[key]) || 0 : null;
+    return String(mod === null ? base : base + mod);
   }
   const m = /(\d+)\s*(?:\+\s*\w+\s*)?damage/i.exec(text);
   return m ? m[1] : '';
@@ -11587,6 +11623,34 @@ function canCatchBreath(c){
   if(!rc || (Number(rc.current)||0) <= 0) return false;
   return heroStatus(c) !== 'dying';
 }
+// Named condition tracking (task #163 -- Heroes p.62-63). A condition's
+// duration is one of three shapes the book actually uses:
+//   - 'saveEnds': stays until the affected hero rolls a d10 at the end of
+//     their turn and gets 6+ -- see rollConditionSave.
+//   - 'thisRound': an approximation for anything phrased "until the start/
+//     end of a turn" -- exact round-and-turn-relative tracking would need
+//     more context than this app has (whose turn it was applied on, where
+//     in the round), so this clears the whole condition once the round
+//     counter moves past the one it was added on. Close enough for a
+//     table aid; the label says so rather than pretending to be precise.
+//   - 'encounter': lives until manually cleared or the encounter ends
+//     (which deletes combat_state outright).
+const CONDITION_DURATIONS = {
+  saveEnds: { label: 'Save ends', hint: 'Roll a d10 at the end of your turn -- 6 or higher removes it.' },
+  thisRound: { label: 'This round', hint: 'Clears once the round counter advances.' },
+  encounter: { label: 'Until end of encounter', hint: 'Stays until cleared or the encounter ends.' },
+};
+const COMMON_CONDITIONS = ['Bleeding','Dazed','Frightened','Grabbed','Prone','Restrained','Slowed','Taunted','Weakened'];
+function heroActiveConditions(combat, heroId){
+  const all = (combat && combat.heroConditions && combat.heroConditions[heroId]) || [];
+  const round = Number(combat && combat.round) || 1;
+  return all.filter(cond => cond.durationType !== 'thisRound' || Number(cond.addedRound) === round);
+}
+async function persistHeroConditions(c, heroId, nextList){
+  const data = await combatHeroConditionsSetRemote(c.campaignId, heroId, nextList);
+  if(data) state.activeCombat = data;
+  renderMain();
+}
 async function combatEndRemote(campaignId){
   const { error } = await sb.rpc('combat_end', { p_campaign_id: campaignId });
   if(error){ alert('Could not end combat: ' + error.message); return false; }
@@ -11602,6 +11666,10 @@ async function pollCombatOnce(campaignId){
   const wasActive = !!state.activeCombat;
   state.activeCombat = await loadCombatState(campaignId);
   const nowActive = !!state.activeCombat;
+  // A brand new encounter row means a fresh victoryCalled:false, so any
+  // earlier dismissal is stale -- clear it so the banner can show again
+  // for this new fight.
+  if(!wasActive && nowActive) state.victoryBannerDismissed = false;
   // Auto-jump the player to the dedicated Combat tab the moment their
   // Director starts an encounter, and back to Home when it ends -- a phone
   // sitting on the table between turns shouldn't need a manual tab switch
@@ -11958,6 +12026,16 @@ const state = {
   bleedRollResult: null,        // UI-only: last bleeding-damage roll (1d6 + level) for the current hero
   levelUpFlow: null,            // {steps, index, fromLevel, toLevel} while the guided Level-Up modal is open
   combatActionNote: null,       // last combat-tab action result (surge spend/grant, damage applied) -- shown as a banner until the next action
+  // Soft per-turn action-economy reminder (Heroes p.62: 1 move + 1 main
+  // action + 1 maneuver per turn -- free triggered actions/free maneuvers
+  // don't count). Client-only and not synced -- it's a personal checklist,
+  // not an enforced gate, since the app can't see every action a hero takes
+  // at the table. Reset whenever a hero's turn opens.
+  turnActionsUsed: { move: false, main: false, maneuver: false },
+  conditionPickerOpenFor: null,  // heroId currently showing the + Condition inline form, or null
+  conditionPickerDraft: null,    // { name, durationType } while that form is open
+  projectRollResults: {},        // last Project Roll result per downtime project id, for display
+  victoryBannerDismissed: false, // player has dismissed the 'Victory!' banner for the current encounter
   monsterAbilityTarget: {},     // UI-only: selected potency-check target hero per ability id
   expandedMonsterGroups: new Set(), // UI-only: which monster group cards are expanded
   monsterLibraryFilter: { search:'', org:'', role:'', family:'', sort:'name' }, // UI-only: Encounter Builder library controls
@@ -12459,6 +12537,11 @@ const app = {
     const gain = heroicResourceGainForClass(c.class);
     const data = await combatHeroTurnStartRemote(c.campaignId, heroId, gain);
     if(data) state.activeCombat = data;
+    state.turnActionsUsed = { move: false, main: false, maneuver: false };
+    renderMain();
+  },
+  toggleTurnAction(kind){
+    state.turnActionsUsed[kind] = !state.turnActionsUsed[kind];
     renderMain();
   },
   async endMyTurn(heroId){
@@ -12466,6 +12549,7 @@ const app = {
     if(!c || !c.campaignId) return;
     const data = await combatHeroTurnEndRemote(c.campaignId, heroId);
     if(data) state.activeCombat = data;
+    state.turnActionsUsed = { move: false, main: false, maneuver: false };
     renderMain();
   },
   // Surges (Heroes rulebook p.75). Three entry points:
@@ -12498,6 +12582,61 @@ const app = {
     state.activeCombat = data;
     state.combatActionNote = null;
     renderMain();
+  },
+  toggleConditionPicker(heroId){
+    state.conditionPickerOpenFor = state.conditionPickerOpenFor === heroId ? null : heroId;
+    state.conditionPickerDraft = { name: COMMON_CONDITIONS[0], durationType: 'saveEnds' };
+    renderMain();
+  },
+  updateConditionDraft(e, field){
+    if(!state.conditionPickerDraft) return;
+    state.conditionPickerDraft[field] = e.target.value;
+  },
+  async addConditionToHero(heroId){
+    const c = state.current;
+    if(!c || !c.campaignId) return;
+    const draft = state.conditionPickerDraft || {};
+    const name = (draft.name || '').trim();
+    if(!name) return;
+    const combat = state.activeCombat;
+    const current = heroActiveConditions(combat, heroId).slice();
+    // Keep any not-currently-active-but-not-yet-pruned thisRound entries out
+    // of the write -- heroActiveConditions already filtered those, so this
+    // naturally prunes stale rounds every time a condition is added.
+    current.push({
+      id: 'cond-' + Math.random().toString(36).slice(2, 9),
+      name,
+      durationType: draft.durationType || 'saveEnds',
+      addedRound: Number(combat && combat.round) || 1,
+    });
+    state.conditionPickerOpenFor = null;
+    await persistHeroConditions(c, heroId, current);
+  },
+  async rollConditionSave(heroId, condId){
+    const c = state.current;
+    if(!c || !c.campaignId) return;
+    const combat = state.activeCombat;
+    const list = heroActiveConditions(combat, heroId);
+    const cond = list.find(x => x.id === condId);
+    if(!cond) return;
+    const roll = 1 + Math.floor(Math.random()*10);
+    const success = roll >= 6;
+    state.combatActionNote = success
+      ? `Saving throw for ${cond.name}: rolled ${roll} -- effect ends.`
+      : `Saving throw for ${cond.name}: rolled ${roll} -- effect continues.`;
+    if(success){
+      const next = list.filter(x => x.id !== condId);
+      await persistHeroConditions(c, heroId, next);
+    } else {
+      renderMain();
+    }
+  },
+  async removeCondition(heroId, condId){
+    const c = state.current;
+    if(!c || !c.campaignId) return;
+    const combat = state.activeCombat;
+    const next = heroActiveConditions(combat, heroId).filter(x => x.id !== condId);
+    await persistHeroConditions(c, heroId, next);
   },
   async spendSurgesForDamage(n){
     const c = state.current;
@@ -13049,12 +13188,6 @@ const app = {
     state.current.skills.push({ id: skillId(), group, name, trained:true });
     input.value=''; scheduleSave(); renderMain();
   },
-  addAbility(){
-    const newId = abilityId();
-    state.current.abilities.unshift({ id: newId, name:'New Ability', type:'Action', keywords:'', distance:'', target:'', cost:'', effect:'' });
-    state.expandedAbilityIds.add(newId);
-    scheduleSave(); renderMain();
-  },
   removeAbility(id){
     state.current.abilities = state.current.abilities.filter(a=>a.id!==id);
     state.expandedAbilityIds.delete(id);
@@ -13099,7 +13232,7 @@ const app = {
     // suggestDamageFromText's comment for why re-rolling on every render
     // was wrong (it would silently change the number, or blow away a
     // manual edit, behind the player's back).
-    state.rollResults[id].damageSuggestion = a ? suggestDamageFromText(tierTextFor(a.effect, tier)) : '';
+    state.rollResults[id].damageSuggestion = a ? suggestDamageFromText(tierTextFor(a.effect, tier), c) : '';
     delete state.abilityDamageOverride[id];
     renderMain();
   },
@@ -13115,7 +13248,7 @@ const app = {
       roll.charKey = key; roll.charVal = val; roll.total = roll.d1 + roll.d2 + val;
     }
     roll.tier = tierFor(roll.total);
-    roll.damageSuggestion = a ? suggestDamageFromText(tierTextFor(a.effect, roll.tier)) : '';
+    roll.damageSuggestion = a ? suggestDamageFromText(tierTextFor(a.effect, roll.tier), c) : '';
     delete state.abilityDamageOverride[id];
     renderMain();
   },
@@ -13249,6 +13382,10 @@ const app = {
     else state.expandedPickerAbilities.add(key);
     render();
   },
+  toggleSkillsEditMode(){
+    state.skillsEditMode = !state.skillsEditMode;
+    renderMain();
+  },
   toggleClassAbility(kind, name){
     const c = state.current;
     const existing = c.abilities.find(a=>a.name===name && a._src==='class');
@@ -13296,6 +13433,35 @@ const app = {
   updateProject(e, id, field, isNumber){
     const p = (state.current.downtimeProjects||[]).find(x=>x.id===id);
     if(p){ p[field] = isNumber ? Number(e.target.value)||0 : e.target.value; scheduleSave(); }
+  },
+  // Project Roll (Heroes p.293-294): a respite activity, test total becomes
+  // project points no matter how low (2d10 alone already floors at 2, so
+  // the book's "minimum 1" only matters once banes are involved -- not
+  // modeled here since edges/banes are situational calls the Director
+  // makes, same reasoning as not auto-applying condition mechanics in
+  // #163). A natural 19-20 on the two dice (before adding the
+  // characteristic) is a breakthrough: the roll still counts, and you may
+  // roll again in the same respite.
+  dismissVictoryBanner(){
+    state.victoryBannerDismissed = true;
+    renderMain();
+  },
+  rollProjectPoints(id){
+    const c = state.current;
+    const p = (c.downtimeProjects||[]).find(x=>x.id===id);
+    if(!p) return;
+    const d1 = 1 + Math.floor(Math.random()*10);
+    const d2 = 1 + Math.floor(Math.random()*10);
+    const natural = d1 + d2;
+    const key = Object.keys(c.characteristics||{}).find(k => k.toLowerCase() === String(p.characteristic||'').trim().toLowerCase());
+    const charVal = key ? (Number(c.characteristics[key]) || 0) : 0;
+    const total = Math.max(1, natural + charVal);
+    const breakthrough = natural >= 19;
+    p.progress = (Number(p.progress) || 0) + total;
+    state.projectRollResults = state.projectRollResults || {};
+    state.projectRollResults[id] = { d1, d2, charVal, total, breakthrough, matchedChar: !!key };
+    scheduleSave();
+    renderMain();
   },
 
   /* ---- titles ---- */
@@ -13459,10 +13625,43 @@ function renderCombatTab(c){
     </div>
     ${abilities.length===0 ? `<div class="abilities-empty">No abilities added yet -- add them on the Abilities tab.</div>` : ''}
     ${abilities.map(a=>abilityRowHtml(a, c)).join('')}
+    ${classInnateAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
     ${freeStrikeAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
   `;
 }
 
+// Shared between the player's own in-combat panel and the Director's
+// per-hero row in the Encounter Runner -- same data, same controls, just
+// rendered at two different compactness levels (compact=true drops the
+// hint text and save-roll button, since the Director's row is a list of
+// many heroes at once and shouldn't grow a paragraph per condition).
+function renderConditionsBlock(heroId, combat, compact){
+  const list = heroActiveConditions(combat, heroId);
+  const pickerOpen = state.conditionPickerOpenFor === heroId;
+  const draft = state.conditionPickerDraft || { name: COMMON_CONDITIONS[0], durationType: 'saveEnds' };
+  return `
+    ${list.length ? `<div class="condition-list">
+      ${list.map(cond => {
+        const dur = CONDITION_DURATIONS[cond.durationType] || CONDITION_DURATIONS.encounter;
+        return `<span class="condition-tag" title="${escapeAttr(dur.hint)}">${escapeHtml(cond.name)} · ${escapeHtml(dur.label)}
+          ${cond.durationType==='saveEnds' && !compact ? `<button type="button" class="condition-x" style="border:none;background:none;color:inherit;font:inherit;padding:0;" onclick="app.rollConditionSave('${heroId}','${cond.id}')" title="Roll save (d10, 6+ ends it)">🎲</button>` : ''}
+          <span class="condition-x" onclick="app.removeCondition('${heroId}','${cond.id}')" title="Remove">✕</span>
+        </span>`;
+      }).join('')}
+    </div>` : ''}
+    ${pickerOpen ? `
+    <div class="condition-add-form">
+      <select onchange="app.updateConditionDraft(event,'name')">
+        ${COMMON_CONDITIONS.map(n=>`<option value="${escapeAttr(n)}" ${draft.name===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}
+      </select>
+      <select onchange="app.updateConditionDraft(event,'durationType')">
+        ${Object.keys(CONDITION_DURATIONS).map(k=>`<option value="${k}" ${draft.durationType===k?'selected':''}>${escapeHtml(CONDITION_DURATIONS[k].label)}</option>`).join('')}
+      </select>
+      <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.addConditionToHero('${heroId}')">Add</button>
+      <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.toggleConditionPicker('${heroId}')">Cancel</button>
+    </div>` : `<button type="button" class="hs-edit-btn" style="margin-top:6px;" onclick="app.toggleConditionPicker('${heroId}')">+ Condition</button>`}
+  `;
+}
 function renderInCombatPanel(c){
   if(!c || !c.campaignId) return '';
   const combat = state.activeCombat;
@@ -13479,10 +13678,20 @@ function renderInCombatPanel(c){
   return `
   <div class="kit-card in-combat-panel">
     <span class="h-label" style="color:var(--forge);">⚔ ${escapeHtml(combat.encounterName||'Combat')} — Round ${escapeHtml(combat.round||1)}</span>
+    ${combat.victoryCalled && !state.victoryBannerDismissed ? `
+    <div class="kit-card" style="margin-top:8px;padding:12px 14px;background:rgba(120,200,140,0.1);border-color:var(--good);text-align:center;">
+      <div style="font-family:'Bitter',serif;font-weight:700;font-size:15px;color:var(--good);">🏆 Victory!</div>
+      <p class="array-hint" style="margin:4px 0 8px;color:var(--good);">You received 1 Victory point.</p>
+      <button type="button" class="hs-edit-btn" style="margin:0;" onclick="app.dismissVictoryBanner()">Dismiss</button>
+    </div>` : ''}
     <p class="array-hint" style="margin-top:4px;">${combat.currentSide==='heroes' ? "It's the heroes' turn." : "The monsters are acting."} Malice: ${escapeHtml(combat.malice||0)}.</p>
     ${resourceName ? `<p class="array-hint" style="margin-top:4px;">${escapeHtml(resourceName)}: <strong style="color:var(--forge);">${resourceAmount}</strong></p>` : ''}
     ${potency ? `<p class="array-hint" style="margin-top:4px;" title="Targets resist your ability's potency if their ${escapeHtml(potency.characteristic)} score is not lower than this value.">Potency (${escapeHtml(potency.characteristic)}): <strong style="color:var(--forge);">${escapeHtml(formatPotency(potency))}</strong></p>` : ''}
     ${status ? `<p class="array-hint" style="margin-top:4px;"><span class="status-tag status-${status}">${escapeHtml(heroStatusLabel(status))}</span>${status==='dying' ? ' — you can\'t Catch Breath yourself; an ally can still help you spend a Recovery.' : ''}</p>` : ''}
+    <div class="kit-card" style="margin-top:8px;padding:10px 12px;">
+      <span class="h-label" style="margin:0;">Conditions</span>
+      ${renderConditionsBlock(c.id, combat, false)}
+    </div>
     ${state.combatActionNote ? `<p class="array-hint" style="margin-top:6px;padding:6px 10px;border-left:2px solid var(--forge);color:var(--forge);">${escapeHtml(state.combatActionNote)}</p>` : ''}
     <div class="kit-card" style="margin-top:8px;padding:10px 12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -13511,6 +13720,15 @@ function renderInCombatPanel(c){
       <button type="button" class="hs-edit-btn" style="margin:0;" ${canCatchBreath(c)?'':'disabled'} onclick="app.spendRecovery()">☕ Catch Breath (${Number(c.recoveries&&c.recoveries.current)||0} left)</button>
     </div>
     ${turnOpenByMe ? `<p class="array-hint" style="margin-top:4px;color:var(--forge);">Your turn is open — use abilities or a recovery, then end it.</p>
+       <div class="kit-card" style="margin-top:8px;padding:10px 12px;">
+         <span class="h-label" style="margin:0;">This Turn</span>
+         <p class="array-hint" style="margin:4px 0 8px;">1 move, 1 main action, 1 maneuver — tap each off as you use it. Free triggered actions and free maneuvers don't count against these.</p>
+         <div style="display:flex;gap:6px;flex-wrap:wrap;">
+           ${[['move','Move'],['main','Main Action'],['maneuver','Maneuver']].map(([kind,label])=>`
+             <button type="button" class="hs-edit-btn" style="margin:0;${state.turnActionsUsed[kind]?'opacity:.55;text-decoration:line-through;border-color:var(--good);color:var(--good);':''}" onclick="app.toggleTurnAction('${kind}')">${state.turnActionsUsed[kind]?'✓ ':''}${label}</button>
+           `).join('')}
+         </div>
+       </div>
        <button type="button" class="primary-btn" style="margin-top:8px;" onclick="app.endMyTurn('${c.id}')">✓ End My Turn</button>`
       : myTurn ? `<button type="button" class="primary-btn" style="margin-top:8px;" onclick="app.startMyTurn('${c.id}')">▶ Start My Turn</button>`
       : acted ? `<p class="array-hint" style="margin-top:4px;color:var(--good);">You've gone this round ✓</p>`
@@ -13606,7 +13824,7 @@ function renderVitalsBar(c){
         <button type="button" class="vc-step" onclick="app.bumpStamina(1)">+</button>
       </div>
     </div>
-    ${resourceName ? `
+    ${resourceName && state.activeTab === 'combat' ? `
     <div class="vital-chip resource">
       <span class="vc-label">${escapeHtml(resourceName)}</span>
       <div class="vc-row">
@@ -15012,9 +15230,10 @@ function renderCombatHeroRow(heroId, combat){
   const status = h ? heroStatus(h) : null;
   return `
   <div class="er-hero-row ${acted?'acted':''}">
-    <div>
+    <div style="flex:1;">
       <span class="er-hero-name">${h?escapeHtml(h.name):'Unknown hero'}${acted?' ✓':''}${turnOpen?' <span class="mg-acted-tag">turn open</span>':''}${status?` <span class="status-tag status-${status}">${escapeHtml(heroStatusLabel(status))}</span>`:''}</span><br>
       ${h ? `<span class="array-hint">${escapeHtml(h.stamina?.current)}/${escapeHtml(h.stamina?.max)} Stamina${clsData?' · '+escapeHtml(clsData.resource)+' '+resourceAmount:''}${h.playerName?' · '+escapeHtml(h.playerName):''}${potency?' · Potency '+escapeHtml(formatPotency(potency)):''}</span>` : ''}
+      ${renderConditionsBlock(heroId, combat, true)}
     </div>
     ${turnOpen ? `<button type="button" class="primary-btn secondary" onclick="app.directorEndHeroTurn('${heroId}')">✓ End Turn</button>`
       : canAct ? `<button type="button" class="primary-btn secondary" onclick="app.directorStartHeroTurn('${heroId}')">▶ Start Turn</button>`
@@ -15150,6 +15369,14 @@ function renderHome(c){
   const langs = knownLanguages(c);
   const titles = c.titles || [];
   const signed = v => { const n = Number(v)||0; return n>=0?`+${n}`:`${n}`; };
+  // Whether XP (Victories, converted 1:1 on respite -- see renderProgressionCard)
+  // has actually crossed into the next level's range. Level Up is a Director
+  // call, not an auto-unlock, so this never hides the button outright --
+  // it just stops presenting it as the obvious next tap when nothing's
+  // actually changed, and keeps the XP context it depends on in view instead
+  // of one tab away on Edit Hero.
+  const xpBracket = xpBracketFor(c.xp||0);
+  const eligibleToLevel = xpBracket.level > Number(c.level);
   const nodes = NODE_POS.map(n=>`
     <div class="char-node readonly" style="left:${n.x}%;top:${n.y}%;">
       <span class="char-node-value">${escapeHtml(signed(c.characteristics[n.key]))}</span>
@@ -15173,9 +15400,13 @@ function renderHome(c){
       <div class="card single"><span class="h-label">Size</span><div class="card-row"><span class="vc-value">${escapeHtml(c.size)}</span></div></div>
     </div>
   </div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px;">
     <button type="button" class="primary-btn secondary" onclick="app.setTab('overview')">Edit Hero</button>
-    ${c.class ? `<button type="button" class="primary-btn" onclick="app.startLevelUp()">⬆ Level Up (${escapeHtml(c.level)} → ${Number(c.level)+1})</button>` : ''}
+    ${c.class ? (eligibleToLevel
+      ? `<button type="button" class="primary-btn" onclick="app.startLevelUp()">⬆ Level Up (${escapeHtml(c.level)} → ${Number(c.level)+1})</button>`
+      : `<button type="button" class="primary-btn secondary" disabled title="XP hasn't crossed into the next level's range yet -- your Director calls level-ups, not this app." style="opacity:0.5;cursor:not-allowed;">⬆ Level Up</button>`
+    ) : ''}
+    ${c.class ? `<span class="array-hint" style="margin:0;">${escapeHtml(c.victories||0)} Victories · ${escapeHtml(c.xp||0)} XP${eligibleToLevel ? ` — in the Level ${xpBracket.level} range` : ''}</span>` : ''}
   </div>
   <p class="array-hint" style="margin-top:6px;">Edit Hero is where characteristics, kit, ancestry traits, and culture live -- day to day you shouldn't need it.</p>
 
@@ -15452,6 +15683,23 @@ function renderWizard(c){
   </div>`;
 }
 
+// Creation-time/level-up-time ability picking lives here now (not the
+// day-to-day Abilities tab -- see renderAbilities' comment). Level 1's
+// Signature Ability and any not-yet-picked Heroic Abilities are both reached
+// through the same "Choose X Abilities" picker; abilities that unlock at a
+// higher level than the hero currently has stay dimmed inside that modal.
+function renderAbilitiesCard(c, cls){
+  if(!cls) return '';
+  const hasClassAbilities = c.abilities.some(a=>a._src==='class');
+  return `
+  <div class="kit-card" ${!hasClassAbilities ? 'style="border-color:var(--forge);"' : ''}>
+    <span class="h-label" ${!hasClassAbilities ? 'style="color:var(--forge);"' : ''}>Abilities</span>
+    <p class="array-hint" style="margin-top:4px;">${hasClassAbilities
+      ? `${c.abilities.length} ability${c.abilities.length===1?'':'ies'} picked. New Heroic Abilities also come up automatically during Level Up as they unlock -- use this if you need to revisit a pick.`
+      : `${escapeHtml(cls.name)} starts with a Signature Ability and unlocks Heroic Abilities as you level up. See what each does and add them here.`}</p>
+    <button type="button" class="primary-btn" style="margin-top:8px;" onclick="app.openPicker('classAbility')">Choose ${escapeHtml(cls.name)} Abilities</button>
+  </div>`;
+}
 function renderOverview(c){
   const cls = findClassData(c.class);
   return `
@@ -15492,6 +15740,7 @@ function renderOverview(c){
     <div class="feature-pills">${cls.level1.map(f=>`<span class="feature-pill">${escapeHtml(f)}</span>`).join('')}</div>
     <p class="array-hint" style="margin-top:8px;">Feature names only — see Chapter 5: Classes in your rulebook for full text.</p>
   </div>` : ''}
+  ${renderAbilitiesCard(c, cls)}
   ${renderSubclassCard(c)}
   ${renderCensorDomainCard(c)}
   ${renderPerksCard(c)}
@@ -15740,6 +15989,11 @@ function renderCultureModal(aspectKey){
   </div>`;
 }
 
+// Day-to-day, this tab is read-only: a trained skill is fixed once picked at
+// character creation (or via a later grant), so re-showing every skill as a
+// live checkbox invited accidental untraining mid-session. Default view is
+// just "what am I trained in, by category" -- the full pick/rename/add/remove
+// toolkit from before still exists, now behind one explicit Edit toggle.
 function renderSkills(c){
   const groups = {};
   c.skills.forEach(s=>{ (groups[s.group] = groups[s.group]||[]).push(s); });
@@ -15747,6 +16001,27 @@ function renderSkills(c){
   const uniqueGroups = [...new Set(groupNames)];
   const cls = findClassData(c.class);
   const career = findCareerData(c.career);
+  const editing = !!state.skillsEditMode;
+
+  if(!editing){
+    const trainedByGroup = uniqueGroups.map(g=>({ group:g, list:(groups[g]||[]).filter(s=>s.trained) })).filter(g=>g.list.length);
+    return `
+    <p style="color:var(--text-faint);font-size:12.5px;margin:-4px 0 16px;max-width:680px;line-height:1.5;">
+      Skills you're trained in, by category.
+    </p>
+    ${trainedByGroup.length ? `<div class="skill-groups">
+      ${trainedByGroup.map(g=>`
+        <div class="skill-group">
+          <h3>${escapeHtml(g.group)}</h3>
+          <div class="feature-pills">
+            ${g.list.map(s=>`<span class="feature-pill">${escapeHtml(s.name)}</span>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>` : `<p class="array-hint">No trained skills yet — tap Edit Skills below to apply your Class/Career Quick Build or pick your own.</p>`}
+    <button type="button" class="primary-btn secondary" style="margin-top:16px;" onclick="app.toggleSkillsEditMode()">Edit Skills</button>
+    `;
+  }
+
   return `
     <p style="color:var(--text-faint);font-size:12.5px;margin:-4px 0 16px;max-width:680px;line-height:1.5;">
       Check the box to mark a skill trained. Skills come from your Class and Career Quick Builds and your Culture picks (Edit Hero) — rename or remove a row if your table plays it differently.
@@ -15776,6 +16051,7 @@ function renderSkills(c){
         </div>`;
       }).join('')}
     </div>
+    <button type="button" class="primary-btn" style="margin-top:16px;" onclick="app.toggleSkillsEditMode()">Done</button>
   `;
 }
 
@@ -15861,33 +16137,59 @@ function freeStrikeAbilities(c){
     mk('ranged', rangedSrc ? rangedSrc.name : 'Ranged Weapon Free Strike', 'Ranged 5', [2,4,6]),
   ];
 }
+
+// Some level-1 class features are printed in the book with the exact same
+// card shape as a signature/heroic ability (keywords, distance, target,
+// action type) but were deliberately left out of ABILITIES.classes when
+// that data was extracted, on the theory that they're "features" rather
+// than "abilities" a player picks. In play that distinction doesn't hold:
+// Null Field is a Maneuver a null actually uses and re-uses every combat,
+// and Inertial Shield is a Free triggered action -- both need to show up
+// as a real, rollable-looking row next to everything else, same reasoning
+// as freeStrikeAbilities above. Keyed by class name; empty array for any
+// class with no such gap (i.e. everywhere but Null, so far -- see
+// draw-steel-rules skill notes on the Null ability extraction).
+function classInnateAbilities(c){
+  const suffix = c && c.id ? c.id : 'default';
+  const byClass = {
+    Null: [
+      {
+        id: `innate-nullfield-${suffix}`, name: 'Null Field', type: 'Class Feature', cost: '',
+        actionType: 'Maneuver',
+        keywords: 'Area, Psionic',
+        distance: '1 aura', target: 'Each enemy in the area',
+        effect: "Each enemy inside your aura has its potencies reduced by 1. Once per turn as a free maneuver, spend 1 discipline to add one of these until the start of your next turn: (a) the first time a target takes damage on a turn, you can slide it up to 2 squares; (b) a target that starts its turn inside can't shift; or (c) potency effects you or an ally inflict on a target inside gain +1 potency. Stays active outside of combat too -- it only ends if you're dying or you end it voluntarily (no action required).",
+      },
+      {
+        id: `innate-inertialshield-${suffix}`, name: 'Inertial Shield', type: 'Class Feature', cost: '',
+        actionType: 'Free triggered action',
+        keywords: 'Psionic',
+        distance: 'Self', target: 'Self',
+        effect: "Trigger: you take damage. Effect: halve the damage. You may also spend 1 discipline to reduce the potency of one effect tied to that damage by 1 against you.",
+      },
+    ],
+  };
+  const list = byClass[c && c.class] || [];
+  return list.map(a => ({ ...a, _src: 'classFeature', _synthetic: true }));
+}
+// Picking/adding abilities moved to Edit Hero (renderAbilitiesCard) and the
+// guided Level-Up flow (levelUpStepsFor's 'abilities' step) -- this tab is
+// now read-only during normal play, same reasoning as the Skills tab: your
+// ability list is a creation-time/level-up-time choice, not something to
+// change mid-session, so it shouldn't invite editing every time you glance
+// at what Charge does.
 function renderAbilities(c){
   const clsData = ABILITIES.classes[c.class];
-  const hasClassAbilities = c.abilities.some(a=>a._src==='class');
-  // A hero with a class but no class abilities picked yet is almost always mid-character-
-  // creation -- surface the level 1 pick as the headline action instead of a small button
-  // buried in a header row, so it's the obvious next thing to do.
-  const startPrompt = (clsData && !hasClassAbilities) ? `
-    <div class="kit-card" style="border-color:var(--forge);margin-bottom:20px;">
-      <span class="h-label" style="color:var(--forge);">Pick Your Level 1 Abilities</span>
-      <p class="array-hint" style="margin-top:4px;">${escapeHtml(c.class)} starts with a Signature Ability and unlocks Heroic Abilities as you level up. See what each does and add them here.</p>
-      <button type="button" class="primary-btn" style="margin-top:10px;" onclick="app.openPicker('classAbility')">Choose ${escapeHtml(c.class)} Abilities</button>
-    </div>
-  ` : '';
   return `
-    ${startPrompt}
     ${renderSubclassFeatureCard(c)}
     ${renderCensorDomainCard(c)}
     <div class="abilities-header">
       <span class="h-label">${c.abilities.length} Abilit${c.abilities.length===1?'y':'ies'}</span>
-      <div class="abilities-header-actions">
-        ${clsData ? `<button class="primary-btn" onclick="app.openPicker('classAbility')">+ ${escapeHtml(c.class)}</button>` : ''}
-        <button class="primary-btn secondary" onclick="app.addAbility()">+ Custom</button>
-      </div>
     </div>
-    ${!clsData ? `<p class="array-hint" style="margin:-8px 0 14px;">${c.class ? `No captured ability list for ${escapeHtml(c.class)} yet — add abilities by hand below, or see Chapter 5 in your rulebook.` : 'Choose a class on Edit Hero to unlock its signature and heroic ability list here.'}</p>` : ''}
-    ${c.abilities.length===0 ? `<div class="abilities-empty">No abilities yet. Tap "+ ${clsData?escapeHtml(c.class):'Custom'}" above to add your first one.</div>` : ''}
+    ${!clsData ? `<p class="array-hint" style="margin:-8px 0 14px;">${c.class ? `No captured ability list for ${escapeHtml(c.class)} yet — see Chapter 5 in your rulebook.` : 'Choose a class on Edit Hero to unlock its signature and heroic ability list here.'}</p>` : ''}
+    ${c.abilities.length===0 ? `<div class="abilities-empty">No abilities yet. Pick your Level 1 Abilities on Edit Hero.</div>` : ''}
     ${c.abilities.map(a=>abilityRowHtml(a, c)).join('')}
+    ${classInnateAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
     ${freeStrikeAbilities(c).map(a=>abilityRowHtml(a, c)).join('')}
     ${renderUniversalActionsCard()}
   `;
@@ -16231,7 +16533,10 @@ function renderDowntime(c){
       <button class="primary-btn" onclick="app.openPicker('downtimeArchetype')">+ New Project</button>
     </div>
     ${projects.length===0 ? `<div class="abilities-empty">No downtime projects yet. Crafting a treasure, researching lore, building a stronghold — track progress here between sessions.</div>` : ''}
-    ${projects.map(p=>`
+    ${projects.map(p=>{
+      const rollResult = (state.projectRollResults||{})[p.id];
+      const complete = p.goal>0 && p.progress>=p.goal;
+      return `
       <div class="ability-card">
         <div class="ability-top">
           <input type="text" value="${escapeAttr(p.name)}" oninput="app.updateProject(event,'${p.id}','name')" placeholder="Project name">
@@ -16246,9 +16551,18 @@ function renderDowntime(c){
             <div class="project-bar"><div class="project-bar-fill" style="width:${p.goal>0?Math.min(100,Math.round(100*p.progress/p.goal)):0}%"></div></div>
           </div>
         </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+          <button type="button" class="hs-edit-btn" style="margin:0;" ${complete?'disabled':''} onclick="app.rollProjectPoints('${p.id}')">🎲 Project Roll (respite activity)</button>
+          ${complete ? `<span class="array-hint" style="margin:0;color:var(--good);">Goal reached!</span>` : ''}
+        </div>
+        ${rollResult ? `<p class="array-hint" style="margin-top:6px;font-family:'JetBrains Mono',monospace;">
+          d10 ${rollResult.d1} + d10 ${rollResult.d2}${rollResult.matchedChar?` + ${escapeHtml(p.characteristic)} ${rollResult.charVal}`:''} = <strong style="color:var(--forge);">${rollResult.total} points</strong>
+          ${rollResult.breakthrough ? ' — <strong style="color:var(--good);">Breakthrough!</strong> Natural 19-20 — you may make another project roll this respite.' : ''}
+          ${!rollResult.matchedChar && p.characteristic ? ` (couldn't match "${escapeHtml(p.characteristic)}" to a characteristic — add it manually to Progress if needed)` : ''}
+        </p>` : ''}
         <div class="field"><label>Notes</label><textarea oninput="app.updateProject(event,'${p.id}','notes')" placeholder="Source, prerequisites, what happens at goal…">${escapeHtml(p.notes)}</textarea></div>
       </div>
-    `).join('')}
+    `;}).join('')}
   `;
 }
 
