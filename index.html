@@ -16192,6 +16192,7 @@ function freeStrikeAbilities(c){
 // draw-steel-rules skill notes on the Null ability extraction).
 function classInnateAbilities(c){
   const suffix = c && c.id ? c.id : 'default';
+  const chosenSubclass = c && c.subclass || [];
   const byClass = {
     Null: [
       {
@@ -16209,8 +16210,374 @@ function classInnateAbilities(c){
         effect: "Trigger: you take damage. Effect: halve the damage. You may also spend 1 discipline to reduce the potency of one effect tied to that damage by 1 against you.",
       },
     ],
+    // Fury: 1st-level aspect features (Berserker/Reaver/Stormwight) plus the
+    // stormwight kit's Aspect of the Wild -- printed as real ability cards
+    // (Triggered/Maneuver, Spend 1 Ferocity riders) but excluded from the
+    // signature/heroic extraction as "features." requiresSubclass gates
+    // each to the aspect that actually grants it.
+    Fury: [
+      {
+        id: `innate-linesofforce-${suffix}`, name: 'Lines of Force', type: 'Class Feature', cost: '', requiresSubclass: 'Berserker',
+        actionType: 'Free triggered action',
+        keywords: 'Magic, Melee',
+        distance: 'Melee 1', target: 'Self or one creature',
+        effect: "Trigger: a target would be force moved. Effect: redirect it -- pick a new target of the same size or smaller within range to be force moved instead, choosing the destination (and you can push it even if the original effect couldn't). The forced-movement distance gains a bonus equal to your Might score. Spend 1 Ferocity: double that bonus instead.",
+      },
+      {
+        id: `innate-unearthlyreflexes-${suffix}`, name: 'Unearthly Reflexes', type: 'Class Feature', cost: '', requiresSubclass: 'Reaver',
+        actionType: 'Free triggered action',
+        keywords: '',
+        distance: 'Self', target: 'Self',
+        effect: "Trigger: you take damage. Effect: halve the damage and shift up to a number of squares equal to your Agility score. Spend 1 Ferocity: if the damage carries a potency effect, its potency is reduced by 1 against you.",
+      },
+      {
+        id: `innate-furiouschange-${suffix}`, name: 'Furious Change', type: 'Class Feature', cost: '', requiresSubclass: 'Stormwight',
+        actionType: 'Free triggered action',
+        keywords: '',
+        distance: 'Self', target: 'Self',
+        effect: "Trigger: you lose Stamina and aren't dying. Effect: gain temporary Stamina equal to your Might score, and you may enter your animal or hybrid form. Spend 1 Ferocity: if you aren't dying, you may also spend a Recovery.",
+      },
+      {
+        id: `innate-aspectofthewild-${suffix}`, name: 'Aspect of the Wild', type: 'Class Feature', cost: '', requiresSubclass: 'Stormwight',
+        actionType: 'Maneuver',
+        keywords: 'Magic',
+        distance: 'Self', target: 'Self',
+        effect: "Shapeshift into your stormwight kit's animal form, hybrid form, or back to your true form. You can still speak normally while shifted, plus to animals sharing your form; while negotiating with an animal in animal form, treat your Renown as 2 higher. Spend 1 Ferocity: as a free maneuver, shapeshift again the same turn.",
+      },
+    ],
+    // Tactician: the three 1st-level Doctrine Triggered Actions, one per
+    // doctrine, each with an optional Spend 1 Focus rider. Notes explicitly
+    // flagged these as "granted free at 1st level" stat blocks excluded
+    // from the heroic-ability extraction because they're a class feature,
+    // not a chosen pick.
+    Tactician: [
+      {
+        id: `innate-advancedtactics-${suffix}`, name: 'Advanced Tactics', type: 'Class Feature', cost: '', requiresSubclass: 'Insurgent',
+        actionType: 'Triggered action',
+        keywords: 'Ranged',
+        distance: 'Ranged 10', target: 'One ally',
+        effect: "Trigger: the target deals damage to another creature. Effect: the target gains 2 surges, which they can use on the triggering damage. Spend 1 Focus: if the damage has a potency effect, its potency increases by 1.",
+      },
+      {
+        id: `innate-overwatch-${suffix}`, name: 'Overwatch', type: 'Class Feature', cost: '', requiresSubclass: 'Mastermind',
+        actionType: 'Triggered action',
+        keywords: 'Ranged',
+        distance: 'Ranged 10', target: 'One creature',
+        effect: "Trigger: the target moves. Effect: at any time during the target's movement, one ally can make a free strike against them. Spend 1 Focus: if the target's Reason is below your weak potency threshold, they're slowed (save ends).",
+      },
+      {
+        id: `innate-parry-${suffix}`, name: 'Parry', type: 'Class Feature', cost: '', requiresSubclass: 'Vanguard',
+        actionType: 'Triggered action',
+        keywords: 'Melee, Weapon',
+        distance: 'Melee 2', target: 'Self or one ally',
+        effect: "Trigger: a creature deals damage to the target. Effect: you can shift 1 square. If the target is you, or if you end this shift adjacent to the target, the target takes half the damage; if that damage has a potency effect, its potency decreases by 1. Spend 1 Focus: this ability's distance becomes Melee 1 + your Reason score, and you can shift up to a number of squares equal to your Reason score instead of 1.",
+      },
+    ],
+    // Talent: Mind Spike (the class's ranged free strike, granted free
+    // like every class's Free Strike but with its own stat block so it's
+    // listed here rather than in freeStrikeAbilities), the six 1st-level
+    // tradition-feature abilities (two per tradition, granted by the
+    // Tradition Features feature rather than chosen), and Levitation
+    // Field (an 8th-level Telekinesis tradition feature -- hence the
+    // minLevel gate alongside requiresSubclass).
+    Talent: [
+      {
+        id: `innate-mindspike-${suffix}`, name: 'Mind Spike', type: 'Class Feature', cost: '',
+        actionType: 'Main action',
+        keywords: 'Psionic, Ranged, Strike, Telepathy',
+        distance: 'Ranged 10', target: 'One creature',
+        effect: "Power Roll + Reason: ≤11 2 + Reason psychic damage; 12-16 4 + Reason psychic damage; 17+ 6 + Reason psychic damage. Strained: the target takes an extra 2 psychic damage, and you also take 2 psychic damage that can't be reduced in any way.",
+      },
+      {
+        id: `innate-accelerate-${suffix}`, name: 'Accelerate', type: 'Class Feature', cost: '', requiresSubclass: 'Chronopathy',
+        actionType: 'Maneuver',
+        keywords: 'Psionic, Ranged',
+        distance: 'Ranged 10', target: 'Self or one creature',
+        effect: "Effect: the target shifts up to a number of squares equal to your Reason score. Spend 2 Clarity: the target can use a maneuver.",
+      },
+      {
+        id: `innate-again-${suffix}`, name: 'Again', type: 'Class Feature', cost: '', requiresSubclass: 'Chronopathy',
+        actionType: 'Triggered action',
+        keywords: 'Psionic, Ranged',
+        distance: 'Ranged 10', target: 'Self or one creature',
+        effect: "Trigger: the target makes an ability roll. Effect: you can use this after seeing the result of the triggering roll -- the target must reroll the power roll and use the new result.",
+      },
+      {
+        id: `innate-feedbackloop-${suffix}`, name: 'Feedback Loop', type: 'Class Feature', cost: '', requiresSubclass: 'Telepathy',
+        actionType: 'Triggered action',
+        keywords: 'Psionic, Ranged',
+        distance: 'Ranged 10', target: 'One creature',
+        effect: "Trigger: the target deals damage to an ally. Effect: the target takes psychic damage equal to half the triggering damage.",
+      },
+      {
+        id: `innate-minortelekinesis-${suffix}`, name: 'Minor Telekinesis', type: 'Class Feature', cost: '', requiresSubclass: 'Telekinesis',
+        actionType: 'Maneuver',
+        keywords: 'Psionic, Ranged',
+        distance: 'Ranged 10', target: 'Self or one size 1 creature or object',
+        effect: "Effect: you slide the target up to a number of squares equal to your Reason score.",
+      },
+      {
+        id: `innate-remoteassistance-${suffix}`, name: 'Remote Assistance', type: 'Class Feature', cost: '', requiresSubclass: 'Telepathy',
+        actionType: 'Maneuver',
+        keywords: 'Psionic, Ranged',
+        distance: 'Ranged 10', target: 'One creature or object',
+        effect: "Effect: the next ability roll an ally makes against the target before the start of your next turn gains an edge. Spend 1 Clarity: you target one additional creature or object.",
+      },
+      {
+        id: `innate-repel-${suffix}`, name: 'Repel', type: 'Class Feature', cost: '', requiresSubclass: 'Telekinesis',
+        actionType: 'Triggered action',
+        keywords: 'Psionic, Ranged',
+        distance: 'Ranged 10', target: 'Self or one ally',
+        effect: "Trigger: the target takes damage or is force moved. Effect: the target takes half the triggering damage, or the distance of the triggering forced movement is reduced by a number of squares equal to your Reason score (your choice if both happened). If the forced movement is reduced to 0 squares, the target can push the source of the forced movement a number of squares equal to your Reason score.",
+      },
+      {
+        id: `innate-levitationfield-${suffix}`, name: 'Levitation Field', type: 'Class Feature', cost: '', requiresSubclass: 'Telekinesis', minLevel: 8,
+        actionType: 'Maneuver',
+        keywords: 'Area, Psionic',
+        distance: '3 burst', target: 'Each ally in the area',
+        effect: "Effect: each target can fly until the start of your next turn and can immediately shift up to their speed; you can also shift up to your speed. While flying, a target's stability is reduced to 0 and can't be increased. Spend 5 Clarity: the effects last for 1 hour instead.",
+      },
+    ],
+    // Shadow: the nine 1st-level-and-up college/class features formatted
+    // as ability stat blocks but excluded because they're granted free
+    // (per-college or, for Careful Observation/Night Watch, to every
+    // shadow) rather than chosen from a tier. Clever Trick and Hesitation
+    // Is Weakness are NOT here -- those were already included ("granted":
+    // true) in the extraction.
+    Shadow: [
+      {
+        id: `innate-blackashteleport-${suffix}`, name: 'Black Ash Teleport', type: 'Class Feature', cost: '', requiresSubclass: 'College of Black Ash',
+        actionType: 'Maneuver',
+        keywords: 'Magic',
+        distance: 'Self', target: 'Self',
+        effect: "Effect: you teleport up to 5 squares. If you have concealment or cover at your destination, you can use the Hide maneuver even if you're observed; if you successfully hide this way, you gain 1 surge. Spend 1+ Insight: you teleport 1 additional square for each insight spent.",
+      },
+      {
+        id: `innate-inallthisconfusion-${suffix}`, name: 'In All This Confusion', type: 'Class Feature', cost: '', requiresSubclass: 'College of Black Ash',
+        actionType: 'Triggered action',
+        keywords: 'Magic',
+        distance: 'Self', target: 'Self',
+        effect: "Trigger: you take damage. Effect: you take half the damage, then can teleport up to 4 squares after the triggering effect resolves. Spend 1+ Insight: you teleport 1 additional square for each insight spent.",
+      },
+      {
+        id: `innate-coattheblade-${suffix}`, name: 'Coat the Blade', type: 'Class Feature', cost: '', requiresSubclass: 'College of Caustic Alchemy',
+        actionType: 'Maneuver',
+        keywords: '',
+        distance: 'Self', target: 'Self',
+        effect: "Effect: you gain 2 surges. Additionally, whenever you use a surge before the end of the encounter, you can choose to have it deal poison damage instead. Spend 1+ Insight: for each insight spent, you gain 1 additional surge.",
+      },
+      {
+        id: `innate-smokebomb-${suffix}`, name: 'Smoke Bomb', type: 'Class Feature', cost: '', requiresSubclass: 'College of Caustic Alchemy',
+        actionType: 'Passive',
+        keywords: '',
+        distance: '', target: '',
+        effect: "You can use the Hide maneuver even if you're observed and don't have cover or concealment. When you do, you shift a number of squares equal to your Agility score; if you end that movement with cover or concealment, you're automatically hidden.",
+      },
+      {
+        id: `innate-defensiveroll-${suffix}`, name: 'Defensive Roll', type: 'Class Feature', cost: '', requiresSubclass: 'College of Caustic Alchemy',
+        actionType: 'Triggered action',
+        keywords: '',
+        distance: 'Self', target: 'Self',
+        effect: "Trigger: another creature damages you. Effect: you take half the triggering damage, then can shift up to 2 squares after the triggering effect resolves. If you end this shift with concealment or cover, you can use the Hide maneuver even if you're observed. Spend 1 Insight: the potency of any effects tied to that damage is reduced by 1 against you.",
+      },
+      {
+        id: `innate-timebomb-${suffix}`, name: 'Time Bomb', type: 'Class Feature', cost: '', requiresSubclass: 'College of Caustic Alchemy', minLevel: 8,
+        actionType: 'Free maneuver',
+        keywords: 'Area, Ranged',
+        distance: '2 cube within 10', target: 'Each enemy in the area',
+        effect: "Free maneuver, once per round on your turn. You also have damage immunity against area abilities and effects equal to your Agility score. Effect: each target takes acid, fire, or poison damage (your choice) equal to your Agility score. For each combat round since this ability was last used this encounter, the area increases by 1 and you gain 1 surge usable only with this ability; area and surges reset after use or at the end of the encounter. Spend 2+ Insight: for every 2 insight spent, increase the cube's size by 1 and gain 1 more surge usable only with this ability.",
+      },
+      {
+        id: `innate-imnothreat-${suffix}`, name: "I'm No Threat", type: 'Class Feature', cost: '', requiresSubclass: 'College of the Harlequin Mask',
+        actionType: 'Maneuver',
+        keywords: 'Magic',
+        distance: 'Self', target: 'Self',
+        effect: "Effect: you envelop yourself in an illusion that makes you appear nonthreatening and harmless -- a harmless animal your size, or a less heroic, unarmed version of yourself. While it lasts, your strikes gain an edge, and you gain +1 to the distance you shift on a Disengage move action. It ends when you harm or physically interact with another creature, use this ability again, or end it voluntarily (no action required); ending it by harming a creature grants 1 surge. Spend 1 Insight: instead, the illusion makes you appear as a specific creature of no more than 1 size larger, within 10 squares, entirely (body, clothing, armor, voice) -- you gain an edge on tests to convince that creature's allies you're really them.",
+      },
+      {
+        id: `innate-carefulobservation-${suffix}`, name: 'Careful Observation', type: 'Class Feature', cost: '', minLevel: 3,
+        actionType: 'Maneuver',
+        keywords: 'Ranged',
+        distance: 'Ranged 20', target: 'One creature',
+        effect: "Effect: as long as you stay within distance of the target, keep line of effect to them, and strike no other creature first, you gain an edge on the next strike you make against them, plus 1 surge usable only on that strike.",
+      },
+      {
+        id: `innate-nightwatch-${suffix}`, name: 'Night Watch', type: 'Class Feature', cost: '', minLevel: 4,
+        actionType: 'Triggered action',
+        keywords: 'Ranged, Weapon',
+        distance: 'Ranged 5', target: 'One ally',
+        effect: "While you're hidden, enemies take a bane on tests to search for you or other hidden creatures within 10 squares of you. Trigger: the target takes damage from another creature's ability while you're hidden. Effect: the target takes half the damage, and you remain hidden.",
+      },
+    ],
+    // Troubadour: Performances (the Routines feature's song/dance/poem
+    // list) and four class-act-granted free abilities, all formatted as
+    // stat blocks but excluded because they're granted by a feature
+    // rather than chosen from a Drama tier. Choreography and Revitalizing
+    // Limerick are every troubadour's starting performances; the rest are
+    // class-act-specific and unlock in a later tier alongside that tier's
+    // Drama-cost abilities. minLevel on the later performance tiers is a
+    // best-effort read of the book's page layout (their exact level
+    // heading was ambiguous in extraction) -- worst case a player sees a
+    // song option a level early or late, not a rules-breaking error.
+    Troubadour: [
+      {
+        id: `innate-choreography-${suffix}`, name: 'Choreography', type: 'Class Feature', cost: '',
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "One of your two starting Performances. Effect: while active, each target who starts their turn in the area gains a +2 bonus to speed until the end of their turn.",
+      },
+      {
+        id: `innate-revitalizinglimerick-${suffix}`, name: 'Revitalizing Limerick', type: 'Class Feature', cost: '',
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "One of your two starting Performances. Effect: at the end of each of your turns while active, choose up to a number of targets equal to your Presence score; each chosen target can spend a Recovery.",
+      },
+      {
+        id: `innate-acrobatics-${suffix}`, name: 'Acrobatics', type: 'Class Feature', cost: '', requiresSubclass: 'Duelist',
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "Effect: while active, each target who starts their turn in the area can automatically get a tier 3 outcome on one test to jump, tumble, or climb as part of their movement before the end of their turn.",
+      },
+      {
+        id: `innate-blocking-${suffix}`, name: 'Blocking', type: 'Class Feature', cost: '', requiresSubclass: 'Auteur',
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '2 aura', target: 'Each creature in the area',
+        effect: "Effect: at the end of each of your turns while active, choose up to a number of targets equal to your Presence score and teleport them to unoccupied spaces in the area. A target can't be teleported in a way that would harm them, leave them dying, or inflict a condition or other negative effect.",
+      },
+      {
+        id: `innate-dramaticmonologue-${suffix}`, name: 'Dramatic Monologue', type: 'Class Feature', cost: '', requiresSubclass: 'Auteur',
+        actionType: 'Maneuver',
+        keywords: 'Magic, Ranged',
+        distance: 'Ranged 10', target: 'Special',
+        effect: "Effect: choose one -- a rousing tale of victory gives one ally within distance an edge on their next power roll before the start of your next turn; a tale of high-stakes heroics gives one ally within distance 1 surge; or an insult gives one enemy within distance a bane on their next power roll before the end of their next turn. Spend 1 Drama: choose two targets for the chosen effect instead of one.",
+      },
+      {
+        id: `innate-powerchord-${suffix}`, name: 'Power Chord', type: 'Class Feature', cost: '', requiresSubclass: 'Virtuoso',
+        actionType: 'Maneuver',
+        keywords: 'Area, Magic',
+        distance: '2 burst', target: 'Each enemy in the area',
+        effect: "Power Roll + Presence: ≤11 push 1; 12-16 push 2; 17+ push 3.",
+      },
+      {
+        id: `innate-thundermother-${suffix}`, name: '"Thunder Mother"', type: 'Class Feature', cost: '', requiresSubclass: 'Virtuoso',
+        actionType: 'No action',
+        keywords: 'Magic, Performance, Ranged, Strike',
+        distance: 'Ranged 10', target: 'One creature',
+        effect: "One of your Virtuoso Performances. Effect: at the end of each combat round while active, you can make a power roll against the target that ignores cover (can't target the same creature twice this way). Power Roll + Presence: ≤11 lightning damage equal to your level; 12-16 lightning damage equal to 5 + your level; 17+ lightning damage equal to 10 + your level.",
+      },
+      {
+        id: `innate-balladofthebeast-${suffix}`, name: '"Ballad of the Beast"', type: 'Class Feature', cost: '', requiresSubclass: 'Virtuoso',
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "One of your Virtuoso Performances. Effect: while active, each target who starts their turn in the area gains 1 surge.",
+      },
+      {
+        id: `innate-fireupthenight-${suffix}`, name: '"Fire Up the Night"', type: 'Class Feature', cost: '', requiresSubclass: 'Virtuoso', minLevel: 2,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "A Second Album Performance. Effect: while active, each target who starts their turn in the area doesn't take a bane on strikes against creatures with concealment, and once on their turn can search for hidden creatures as a free maneuver.",
+      },
+      {
+        id: `innate-neverendinghero-${suffix}`, name: '"Never-Ending Hero"', type: 'Class Feature', cost: '', requiresSubclass: 'Virtuoso', minLevel: 2,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "A Second Album Performance. Effect: while active, each target who starts their turn dying while in the area gains an edge on power rolls and ignores the effects of bleeding until the end of their turn.",
+      },
+      {
+        id: `innate-taketwo-${suffix}`, name: 'Take Two!', type: 'Class Feature', cost: '', requiresSubclass: 'Auteur', minLevel: 2,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "Effect: while active, each target who starts their turn in the area can reroll the first power roll that turn that gets a tier 2 outcome, and must use the new roll.",
+      },
+      {
+        id: `innate-riposte-${suffix}`, name: 'Riposte', type: 'Class Feature', cost: '', requiresSubclass: 'Duelist',
+        actionType: 'Triggered action',
+        keywords: 'Melee',
+        distance: 'Melee 1', target: 'Self or one ally',
+        effect: "Trigger: the target takes damage from a melee strike. Effect: the target makes a free strike against the creature who made the triggering strike.",
+      },
+      {
+        id: `innate-turnaboutisfairplay-${suffix}`, name: 'Turnabout Is Fair Play', type: 'Class Feature', cost: '', requiresSubclass: 'Auteur',
+        actionType: 'Triggered action',
+        keywords: 'Ranged',
+        distance: 'Ranged 10', target: 'One creature',
+        effect: "Trigger: the target makes an ability roll that has an edge, double edge, bane, or double bane. Effect: an edge becomes a bane, or a double edge becomes an edge; a bane becomes an edge, or a double bane becomes a bane. Spend 3 Drama: escalate instead -- an edge becomes a double bane (or a double edge is negated), and a bane becomes a double edge (or a double bane is negated).",
+      },
+      {
+        id: `innate-wecantbeupstaged-${suffix}`, name: "We Can't Be Upstaged!", type: 'Class Feature', cost: '', requiresSubclass: 'Duelist', minLevel: 2,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "Effect: while active, a target who starts their turn in the area gains a bonus to the distance they can shift, equal to your Presence score, until the end of their turn.",
+      },
+      {
+        id: `innate-spotlight-${suffix}`, name: 'Spotlight', type: 'Class Feature', cost: '', requiresSubclass: 'Duelist', minLevel: 2,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "Effect: while active, each target who starts their turn in the area gains 1 of their Heroic Resource; it disappears at the end of that target's turn if unspent.",
+      },
+      {
+        id: `innate-moonlightsonata-${suffix}`, name: 'Moonlight Sonata', type: 'Class Feature', cost: '', requiresSubclass: 'Auteur', minLevel: 6,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Each ally in the area',
+        effect: "Effect: while active, each target who is dead can choose to keep taking turns after death -- on each such turn they can move and use a main action or maneuver, but can't spend Recoveries or use triggered actions. At the end of the encounter, any target still doing this turns to dust and blows away.",
+      },
+      {
+        id: `innate-radicalfantasia-${suffix}`, name: 'Radical Fantasia', type: 'Class Feature', cost: '', requiresSubclass: 'Auteur', minLevel: 6,
+        actionType: 'No action',
+        keywords: 'Area, Magic, Performance',
+        distance: '5 aura', target: 'Self and each ally in the area',
+        effect: "Effect: while active, each target who starts their turn in the area ignores difficult terrain, and any forced-movement ability they use gains +2 to the forced-movement distance until the end of their turn. Once per combat round, each target can also use a triggered action as a free triggered action.",
+      },
+    ],
+    // Censor: Judgment and My Life for Yours are 1st-level class features
+    // every censor gets (not a chosen ability), and Trinity of Trickery is
+    // a genuine heroic-ability gap -- a real 9-Wrath ability granted by
+    // the 7th-level Trickery domain feature that the original extraction
+    // pass skipped entirely (not merely reclassified as a feature).
+    Censor: [
+      {
+        id: `innate-judgment-${suffix}`, name: 'Judgment', type: 'Class Feature', cost: '',
+        actionType: 'Maneuver',
+        keywords: 'Magic, Ranged',
+        distance: 'Ranged 10', target: 'One enemy',
+        effect: "Effect: the target is judged by you until the end of the encounter, you use this ability again, you willingly end the effect (no action required), or another censor judges them. The first time each combat round a creature judged by you deals you damage, or you deal damage to a creature judged by you, you gain 1 wrath.",
+      },
+      {
+        id: `innate-mylifeforyours-${suffix}`, name: 'My Life for Yours', type: 'Class Feature', cost: '',
+        actionType: 'Triggered action',
+        keywords: 'Magic, Ranged',
+        distance: 'Ranged 10', target: 'Self or one ally',
+        effect: "Trigger: the target starts their turn or takes damage. Effect: you spend a Recovery, and the target regains Stamina equal to your recovery value. Spend 1 Wrath: you can also end one effect on the target that's ended by a saving throw or that ends at the end of their turn, or a prone target can stand up.",
+      },
+      {
+        id: `innate-trinityoftrickery-${suffix}`, name: 'Trinity of Trickery', type: 'Class Feature', cost: '9 Wrath', requiresCensorDomain: 'Trickery', minLevel: 7,
+        actionType: 'Maneuver',
+        keywords: 'Magic, Ranged',
+        distance: 'Ranged 10', target: 'Self or one ally',
+        effect: "Effect: you create two illusory duplicates of the target anywhere within distance; they last until the end of the encounter. On each of the target's turns, they can move each duplicate up to their speed. If the target is targeted by an ability, they can use a free triggered action to switch places with a duplicate in their line of effect, making the duplicate the target instead. When either duplicate takes damage, it's destroyed.",
+      },
+    ],
   };
-  const list = byClass[c && c.class] || [];
+  const heroLevel = Number(c && c.level) || 1;
+  const list = (byClass[c && c.class] || [])
+    .filter(a => !a.requiresSubclass || chosenSubclass.includes(a.requiresSubclass))
+    // Censor runs a second, independent subclass axis (deity Domain,
+    // stored as c.censorDomain -- separate from the Order that fills
+    // c.subclass), so Trinity of Trickery needs its own gate rather than
+    // reusing requiresSubclass.
+    .filter(a => !a.requiresCensorDomain || (c && c.censorDomain) === a.requiresCensorDomain)
+    .filter(a => !a.minLevel || a.minLevel <= heroLevel);
   return list.map(a => ({ ...a, _src: 'classFeature', _synthetic: true }));
 }
 // Picking/adding abilities moved to Edit Hero (renderAbilitiesCard) and the
@@ -16981,10 +17348,23 @@ function renderClassAbilityModal(c){
   // in order. Locked (above-level) tiers get their own steps at the end
   // rather than a separate collapsed toggle, so Next naturally walks the
   // whole class instead of hiding content behind a second control.
+  // task #182: every heroic tier in Draw Steel is a pick-1 (either 1 of the
+  // open-pool options, or 1 of the two your subclass offers at that tier) --
+  // confirmed against every class's extraction notes, none differ. Showing
+  // that count on the step header answers "how many am I choosing here?"
+  // without the player having to infer it from the book.
+  // task #183: locked (above-your-level) tiers used to get their own steps
+  // at the end of Next, so a 1st-level hero paged through content they can't
+  // pick yet. They're just not offered as steps until the hero is actually
+  // that level -- nothing here is destructive, so this can't strand an
+  // already-picked-but-now-locked ability (that scenario doesn't happen:
+  // you can't add one before it unlocks in the first place).
   const steps = [
     { label: `Signature — choose ${sigChoose}`, sub: `${sigChosenCount}/${sigChoose} added`, items: data.signature, kind: 'signature' },
-    ...groupByTier(availableHeroic).map(tier => ({ label: `Heroic — ${tier.key}`, sub: `available at Lvl ${c.level}`, items: tier.items, kind: 'heroic' })),
-    ...groupByTier(lockedHeroic).map(tier => ({ label: `Heroic — ${tier.key}`, sub: 'above your level', items: tier.items, kind: 'heroic', locked: true })),
+    ...groupByTier(availableHeroic).map(tier => {
+      const chosenInTier = tier.items.filter(h=>addedNames.has(h.name)).length;
+      return { label: `Heroic — ${tier.key}`, sub: `choose 1 · ${chosenInTier}/1 added`, items: tier.items, kind: 'heroic' };
+    }),
   ];
   const stepIdx = Math.min(state.abilityPickerStep || 0, steps.length - 1);
   const step = steps[stepIdx];
