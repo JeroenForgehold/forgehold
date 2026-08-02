@@ -11374,6 +11374,14 @@ async function directorGrantRenownRemote(heroId, delta){
   if(error){ alert('Could not adjust renown: ' + error.message); return null; }
   return data;
 }
+// Director-only: adjusts Victories by a signed delta (director_grant_victories
+// RPC, same shape as director_grant_renown). Used by "Call Victory for
+// Heroes" in the Encounter Runner.
+async function directorGrantVictoriesRemote(heroId, delta){
+  const { data, error } = await sb.rpc('director_grant_victories', { p_hero_id: heroId, p_delta: delta });
+  if(error){ alert('Could not grant victories: ' + error.message); return null; }
+  return data;
+}
 // Directors need the full sheet (Stamina, treasures, etc.), not just the
 // summary roster -- RLS policy "heroes: director reads campaign sheets"
 // permits this read-only.
@@ -11635,8 +11643,30 @@ window.addEventListener('visibilitychange', ()=>{
 // in the area (also p.7) isn't modeled yet; this app has no battle map, so
 // that nuance is left for the table to adjudicate and is called out in the
 // Combat tab rather than silently assumed away.
-function buildCombatMonsters(entries){
-  let idx = 0;
+// Seeds each unique baseName's action list from the book (MONSTER_LIBRARY /
+// getMonsterAbilityData) instead of leaving it for the Director to type in
+// from scratch. Shared by startCombatFromEncounter (initial roster) and
+// releasePendingArrivals (reinforcements arriving mid-combat) so a book
+// monster gets its abilities pre-filled either way; a homebrew/custom
+// monster not in the library just starts with an empty list.
+function seedMonsterAbilitiesFor(baseNames){
+  const out = {};
+  baseNames.forEach(baseName=>{
+    const data = getMonsterAbilityData(baseName);
+    out[baseName] = (data && data.abilities || []).map((a,i)=>({
+      id: 'book-' + baseName.replace(/[^A-Za-z0-9]+/g,'_') + '-' + i,
+      name: a.name,
+      cost: a.category || '',
+      keywords: monsterAbilityTagline(a),
+      effect: a.effect || '',
+      rollMod: rollModifierFrom(a.roll),
+      hasRoll: !!a.roll
+    }));
+  });
+  return out;
+}
+function buildCombatMonsters(entries, startIdx){
+  let idx = startIdx || 0;
   const out = [];
   (entries||[]).forEach(entry=>{
     const m = findMonsterData(entry.monsterName);
@@ -12124,6 +12154,26 @@ const app = {
     if(state.viewingCampaignId) startCombatPolling(state.viewingCampaignId);
     render();
   },
+  openCampaignPackPicker(){
+    state.activePackId = null;
+    state.pickerOpen = 'campaignPacks';
+    stopCombatPolling();
+    render();
+  },
+  selectCampaignPack(packId){
+    state.activePackId = packId;
+    render();
+  },
+  backToPackList(){
+    state.activePackId = null;
+    render();
+  },
+  closeCampaignPackPicker(){
+    state.pickerOpen = null;
+    state.activePackId = null;
+    if(state.viewingCampaignId) startCombatPolling(state.viewingCampaignId);
+    render();
+  },
   setEncounterDraftField(key, val){ state.encounterDraft[key] = val; },
   addEncounterEntry(monsterName){
     const m = findMonsterData(monsterName);
@@ -12212,8 +12262,10 @@ const app = {
       adjustmentNotes: enc.adjustmentNotes || '',
       sourceEncounterId: enc.id,
       originalHeroCount: enc.heroCountAtSave || null,
-      originalEv: enc.evAtSave !== undefined ? enc.evAtSave : encounterEvTotal(enc.entries)
+      originalEv: enc.evAtSave !== undefined ? enc.evAtSave : encounterEvTotal(enc.entries),
+      victoryCondition: enc.victoryCondition || ''
     };
+    state.activePackId = null;
     state.pickerOpen = 'encounterBuilder';
     render();
   },
@@ -12251,9 +12303,22 @@ const app = {
     const d = state.encounterDraft;
     if(!cid || !d || !d.entries || !d.entries.length) return;
     if(state.activeCombat && !confirm('A combat is already running for this campaign. Starting a new one replaces it. Continue?')) return;
-    const entries = d.entries;
+    // Entries tagged stagedRound (e.g. Goblin Guards' round-2 reinforcements)
+    // don't join the fight until the Director explicitly releases them from
+    // the reminder banner -- see releasePendingArrivals(). Everything else
+    // deploys immediately.
+    const immediateEntries = d.entries.filter(e=>!e.stagedRound || e.stagedRound<=1);
+    const stagedEntries = d.entries.filter(e=>e.stagedRound && e.stagedRound>1);
+    const stagedByRound = {};
+    stagedEntries.forEach(e=>{
+      const r = e.stagedRound;
+      (stagedByRound[r] = stagedByRound[r] || []).push(e);
+    });
+    const pendingArrivals = Object.keys(stagedByRound).map(r=>({
+      round: Number(r), entries: stagedByRound[r], released: false
+    })).sort((a,b)=>a.round-b.round);
     const name = d.name || 'Encounter';
-    const monsters = buildCombatMonsters(entries);
+    const monsters = buildCombatMonsters(immediateEntries);
     const heroesFull = state.campaignHeroesFull||[];
     const heroIds = heroesFull.map(h=>h.id);
     const startMalice = maliceStartOfCombat(heroesFull);
@@ -12262,23 +12327,10 @@ const app = {
     heroesFull.forEach(h=>{ heroResources[h.id] = Number(h.victories) || 0; });
     const heroSurges = {};
     heroesFull.forEach(h=>{ heroSurges[h.id] = 0; });
-    // Seed each unique monster's action list from the book instead of
-    // leaving it for the Director to type in from scratch. A homebrew/custom
-    // monster (not in MONSTER_LIBRARY) just starts with an empty list, same
-    // as before -- the manual "+ Add Action" flow still works for those.
-    const monsterAbilities = {};
-    Array.from(new Set(monsters.map(m=>m.baseName))).forEach(baseName=>{
-      const data = getMonsterAbilityData(baseName);
-      monsterAbilities[baseName] = (data && data.abilities || []).map((a,i)=>({
-        id: 'book-' + baseName.replace(/[^A-Za-z0-9]+/g,'_') + '-' + i,
-        name: a.name,
-        cost: a.category || '',
-        keywords: monsterAbilityTagline(a),
-        effect: a.effect || '',
-        rollMod: rollModifierFrom(a.roll),
-        hasRoll: !!a.roll
-      }));
-    });
+    // Seed abilities for every baseName that could appear, including staged
+    // arrivals -- so releasing them later doesn't need a second book lookup.
+    const allBaseNames = Array.from(new Set(d.entries.map(e=>e.monsterName)));
+    const monsterAbilities = seedMonsterAbilitiesFor(allBaseNames);
     const initial = {
       encounterName: name || 'Encounter',
       round: 1,
@@ -12292,6 +12344,9 @@ const app = {
       heroIds,
       heroResources,
       heroSurges,
+      victoryCondition: d.victoryCondition || null,
+      victoryCalled: false,
+      pendingArrivals,
       log: [
         { ts: Date.now(), text: 'Combat started: ' + (name || 'Encounter') },
         { ts: Date.now(), text: `Malice: +${startMalice} (avg Victories) +${round1Gain} (${heroIds.length} heroes + round 1) = ${startMalice + round1Gain}` }
@@ -12523,6 +12578,53 @@ const app = {
     const malice = Math.max(0, (Number(combat.malice)||0) + delta);
     const data = await combatPatchRemote(cid, { malice });
     if(data) state.activeCombat = data;
+    render();
+  },
+  // Manual, Director-triggered reinforcement release -- deliberately not
+  // automatic on round advance, so the Director decides exactly when/where
+  // (e.g. "anywhere within 3 squares of the entrance") the new monsters
+  // enter, same as running it at a physical table. Reuses the abilities
+  // already seeded at combat start (see startCombatFromEncounter).
+  async releasePendingArrivals(idx){
+    const cid = state.viewingCampaignId;
+    const combat = state.activeCombat;
+    if(!cid || !combat) return;
+    const arrivals = combat.pendingArrivals || [];
+    const arrival = arrivals[idx];
+    if(!arrival || arrival.released) return;
+    const existingIdxs = (combat.monsters||[]).map(m=>Number(String(m.id||'').replace(/^m/,''))||0);
+    const startIdx = existingIdxs.length ? Math.max.apply(null, existingIdxs) : 0;
+    const newMonsters = buildCombatMonsters(arrival.entries, startIdx);
+    const monsters = (combat.monsters||[]).concat(newMonsters);
+    const names = newMonsters.map(m=>m.name).join(', ');
+    const log = (combat.log||[]).concat([
+      { ts: Date.now(), text: `Reinforcements arrive (round ${arrival.round}): ${names}` }
+    ]);
+    const pendingArrivals = arrivals.map((a,i)=> i===idx ? Object.assign({}, a, { released:true }) : a);
+    const data = await combatPatchRemote(cid, { monsters, pendingArrivals, log });
+    if(data) state.activeCombat = data;
+    render();
+  },
+  // Grants 1 Victory to every hero in the encounter (Victories reset to 0
+  // on a respite and grant 1 starting Heroic Resource each next encounter --
+  // Heroes rulebook) and flags the encounter as won so the button can't be
+  // pressed twice. Mirrors bumpHeroRenown's grant-then-refresh pattern.
+  async callVictoryForHeroes(){
+    const cid = state.viewingCampaignId;
+    const combat = state.activeCombat;
+    if(!cid || !combat) return;
+    if(combat.victoryCalled){ alert('Victory was already called for this encounter.'); return; }
+    if(!confirm('Grant 1 Victory to each hero and mark this encounter as won by the heroes?')) return;
+    const heroIds = combat.heroIds || [];
+    for(const hid of heroIds){
+      await directorGrantVictoriesRemote(hid, 1);
+    }
+    const log = (combat.log||[]).concat([
+      { ts: Date.now(), text: 'Director called victory for the heroes: +1 Victory each.' }
+    ]);
+    const data = await combatPatchRemote(cid, { victoryCalled: true, log });
+    if(data) state.activeCombat = data;
+    if(state.viewingCampaignId) state.campaignHeroesFull = await loadCampaignHeroesFull(state.viewingCampaignId);
     render();
   },
   // A single prompt() does double duty as both the confirmation dialog you
@@ -14156,10 +14258,11 @@ const SEED_ENCOUNTERS = [
       { group:1, monsterName:'Goblin Warrior', count:2, level:1, role:'Horde Harrier', family:'Goblin, Humanoid' },
       { group:2, monsterName:'Goblin Warrior', count:2, level:1, role:'Horde Harrier', family:'Goblin, Humanoid' },
       { group:3, monsterName:'Goblin Warrior', count:2, level:1, role:'Horde Harrier', family:'Goblin, Humanoid' },
-      { group:4, monsterName:'Goblin Warrior', count:2, level:1, role:'Horde Harrier', family:'Goblin, Humanoid' },
-      { group:5, monsterName:'Goblin Assassin', count:2, level:1, role:'Horde Ambusher', family:'Goblin, Humanoid' }
+      { group:4, monsterName:'Goblin Warrior', count:2, level:1, role:'Horde Harrier', family:'Goblin, Humanoid', stagedRound:2 },
+      { group:5, monsterName:'Goblin Assassin', count:2, level:1, role:'Horde Ambusher', family:'Goblin, Humanoid', stagedRound:2 }
     ],
-    adjustmentNotes: "For six heroes, add two goblin warriors to the start of the encounter. For four heroes, remove two goblin warriors at the start of the encounter. For three heroes, remove four goblin warriors at the start of the encounter."
+    adjustmentNotes: "For six heroes, add two goblin warriors to the start of the encounter. For four heroes, remove two goblin warriors at the start of the encounter. For three heroes, remove four goblin warriors at the start of the encounter.",
+    victoryCondition: "The goblins fight until the second wave (round 2 reinforcements) has arrived and the heroes outnumber them two to one -- then they flee. Encounter ends, heroes earn 1 Victory each."
   },
   {
     id: 'seed-encounter-d1', isSeed: true, name: 'Encounter D1 (Delian Tomb)', heroCountAtSave: 5,
@@ -14174,7 +14277,8 @@ const SEED_ENCOUNTERS = [
       { group:4, monsterName:'Goblin Sniper', count:4, level:1, role:'Minion Artillery', family:'Goblin, Humanoid' },
       { group:5, monsterName:'Goblin Warrior', count:2, level:1, role:'Horde Harrier', family:'Goblin, Humanoid' }
     ],
-    adjustmentNotes: "For six heroes, add two goblin warriors. For four heroes, remove two goblin warriors who are not captains. For three heroes, remove four spinecleavers, four snipers, and the two goblin warriors who are the captains of those squads."
+    adjustmentNotes: "For six heroes, add two goblin warriors. For four heroes, remove two goblin warriors who are not captains. For three heroes, remove four spinecleavers, four snipers, and the two goblin warriors who are the captains of those squads.",
+    victoryCondition: "The goblins fight until the heroes outnumber them two to one, then flee. Encounter ends, heroes earn 1 Victory each."
   },
   {
     id: 'seed-encounter-d3', isSeed: true, name: 'Encounter D3 (Delian Tomb)', heroCountAtSave: 5,
@@ -14186,10 +14290,18 @@ const SEED_ENCOUNTERS = [
       { group:5, monsterName:'Skeleton', count:2, level:1, role:'Horde Artillery', family:'Undead, Soulless' },
       { group:6, monsterName:'Zombie', count:2, level:1, role:'Horde Brute', family:'Undead, Soulless' }
     ],
-    adjustmentNotes: "For six heroes, add two skeletons. For four heroes, remove two ghouls (the skull sigil drops to 40 Stamina). For three heroes, remove four ghouls (the skull sigil drops to 20 Stamina)."
+    adjustmentNotes: "For six heroes, add two skeletons. For four heroes, remove two ghouls (the skull sigil drops to 40 Stamina). For three heroes, remove four ghouls (the skull sigil drops to 20 Stamina).",
+    victoryCondition: "These undead are mindless and fight to the death -- they never flee. Encounter ends, heroes earn 1 Victory each, either when all undead are destroyed OR when the Skull Sigil (a 60-Stamina object in the room, holy weakness 5) is destroyed -- destroying the sigil instantly kills every remaining undead."
   }
 ];
 SEED_ENCOUNTERS.forEach(e => { e.evAtSave = encounterEvTotal(e.entries); });
+// Adventure packs: groups the seed encounters (and, later, any other
+// pre-written adventures) for the "Import from Campaign" picker. Only one
+// pack exists today -- Delian Tomb -- but the Director UI is built around
+// this list so a second adventure just means pushing another entry here.
+const ADVENTURE_PACKS = [
+  { id: 'delian-tomb', name: 'The Delian Tomb', description: 'The starter adventure -- goblins guarding the entrance, then the tomb\'s first level.', encounters: SEED_ENCOUNTERS }
+];
 
 // Auto-tune: scale a saved encounter to a different hero count by adding or
 // removing whole copies of its own most-repeated group -- the same pattern
@@ -14337,11 +14449,15 @@ function renderEncounterBalanceCard(heroes){
 
 function renderEncounterLibraryCard(heroes){
   const budget = computeEncounterBudget(heroes);
-  const all = [...SEED_ENCOUNTERS, ...(state.encounters||[])];
+  // Only this campaign's own saved/imported encounters live here by default --
+  // the Delian Tomb seed pack no longer auto-preloads into every campaign's
+  // list. Bringing in a book encounter is now an explicit action via
+  // "Import from Campaign", which opens the adventure-pack picker below.
+  const all = state.encounters || [];
   return `
   <div class="kit-card" style="margin-top:16px;">
     <span class="h-label">Encounters</span>
-    <p class="array-hint">Delian Tomb seed pack, plus anything you've saved. Import auto-tunes a saved encounter to this campaign's current party.</p>
+    <p class="array-hint">Encounters you've built or imported for this campaign. Import auto-tunes an adventure-pack encounter to this campaign's current party.</p>
     ${all.length ? `<div class="encounter-list">
       ${all.map(e=>{
         const ev = e.evAtSave !== undefined ? e.evAtSave : encounterEvTotal(e.entries);
@@ -14354,12 +14470,77 @@ function renderEncounterLibraryCard(heroes){
           </div>
           <div class="dt-actions">
             <button class="hs-edit-btn" onclick="app.importEncounter('${e.id}')">Import</button>
-            ${!e.isSeed ? `<button class="hs-edit-btn" onclick="app.deleteSavedEncounter('${e.id}')">Delete</button>` : ''}
+            <button class="hs-edit-btn" onclick="app.deleteSavedEncounter('${e.id}')">Delete</button>
           </div>
         </div>`;
       }).join('')}
     </div>` : `<p class="array-hint" style="margin-top:4px;">No encounters yet.</p>`}
-    <button type="button" class="primary-btn" style="margin-top:12px;" onclick="app.openEncounterBuilder()">+ Build Encounter</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <button type="button" class="primary-btn secondary" onclick="app.openCampaignPackPicker()">Import from Campaign</button>
+      <button type="button" class="primary-btn" onclick="app.openEncounterBuilder()">+ Build Encounter</button>
+    </div>
+  </div>`;
+}
+// Two-level picker: adventure packs, then that pack's encounters. Reuses
+// importEncounter()/scaleEncounterToParty() unchanged -- both already look
+// an id up across SEED_ENCOUNTERS, which every pack's encounters array
+// still points at.
+function renderCampaignPackModal(){
+  const budget = computeEncounterBudget(state.campaignHeroesFull||[]);
+  const pack = state.activePackId ? ADVENTURE_PACKS.find(p=>p.id===state.activePackId) : null;
+  if(!pack){
+    return `
+    <div class="modal-backdrop" onclick="app.closeCampaignPackPicker()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Import from Campaign</h2>
+          <button class="modal-close" onclick="app.closeCampaignPackPicker()">✕</button>
+        </div>
+        <div class="modal-scroll-body">
+          <p class="array-hint">Pick an adventure pack, then an encounter to import into this campaign.</p>
+          <div class="encounter-list">
+            ${ADVENTURE_PACKS.map(p=>`
+            <div class="encounter-row">
+              <div>
+                <div class="dt-name">${escapeHtml(p.name)}</div>
+                <div class="array-hint">${escapeHtml(p.description||'')} · ${p.encounters.length} encounter${p.encounters.length===1?'':'s'}</div>
+              </div>
+              <div class="dt-actions">
+                <button class="hs-edit-btn" onclick="app.selectCampaignPack('${p.id}')">View Encounters</button>
+              </div>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+  return `
+  <div class="modal-backdrop" onclick="app.closeCampaignPackPicker()">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2>${escapeHtml(pack.name)}</h2>
+        <button class="modal-close" onclick="app.closeCampaignPackPicker()">✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <button type="button" class="hs-edit-btn" style="margin-bottom:10px;" onclick="app.backToPackList()">← All Packs</button>
+        <div class="encounter-list">
+          ${pack.encounters.map(e=>{
+            const ev = e.evAtSave !== undefined ? e.evAtSave : encounterEvTotal(e.entries);
+            const band = budget ? bandForEV(ev, budget) : null;
+            return `
+            <div class="encounter-row">
+              <div>
+                <div class="dt-name">${escapeHtml(e.name)}</div>
+                <div class="array-hint">Built for ${escapeHtml(e.heroCountAtSave||'?')} heroes · EV ${ev}${band?` · ${band} here`:''}</div>
+              </div>
+              <div class="dt-actions">
+                <button class="hs-edit-btn" onclick="app.importEncounter('${e.id}')">Import</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 // Groups draft entries by their `group` number (Director-assigned pods that
@@ -14857,6 +15038,13 @@ function renderEncounterRunner(camp){
     sideNote = ' Monsters are done for the round, so heroes go back-to-back.';
   }
   const log = combat.log || [];
+  // Reminders are informational-only cards for the Director -- nothing here
+  // fires automatically. Staged arrivals wait for an explicit "Bring them
+  // in" tap (see releasePendingArrivals); the victory condition is just
+  // the book's own end-of-encounter text, paraphrased, kept visible the
+  // whole fight so it doesn't need to be re-read from the adventure book.
+  const pendingNow = (combat.pendingArrivals||[]).map((a,i)=>({...a, idx:i})).filter(a=>!a.released && a.round<=(Number(combat.round)||1));
+  const pendingLater = (combat.pendingArrivals||[]).map((a,i)=>({...a, idx:i})).filter(a=>!a.released && a.round>(Number(combat.round)||1));
   return `
     <div class="content encounter-runner">
       ${renderViewModeToggle()}
@@ -14867,6 +15055,21 @@ function renderEncounterRunner(camp){
       </div>
       <div class="director-shell er-shell">
         <div class="director-main">
+          ${pendingNow.length ? pendingNow.map(a=>`
+          <div class="kit-card" style="border-color:var(--forge);margin-bottom:12px;">
+            <span class="h-label" style="color:var(--forge);">Reinforcements ready -- Round ${escapeHtml(a.round)}</span>
+            <p class="array-hint">${escapeHtml(a.entries.map(e=>`${e.count} × ${e.monsterName}`).join(', '))}. Bring them in when it fits the scene (the book has them appear anywhere within a few squares of the entrance/starting area).</p>
+            <button type="button" class="primary-btn" onclick="app.releasePendingArrivals(${a.idx})">Bring them in</button>
+          </div>`).join('') : ''}
+          ${pendingLater.length ? `<p class="array-hint" style="margin-bottom:12px;">Also staged: ${pendingLater.map(a=>`round ${escapeHtml(a.round)} (${escapeHtml(a.entries.map(e=>`${e.count} × ${e.monsterName}`).join(', '))})`).join('; ')}.</p>` : ''}
+          ${combat.victoryCondition ? `
+          <div class="kit-card" style="margin-bottom:12px;">
+            <span class="h-label">Ending this encounter</span>
+            <p class="array-hint">${escapeHtml(combat.victoryCondition)}</p>
+            ${combat.victoryCalled
+              ? `<p class="array-hint" style="color:var(--forge);">✓ Victory already called -- each hero has been granted 1 Victory.</p>`
+              : `<button type="button" class="primary-btn secondary" onclick="app.callVictoryForHeroes()">Call Victory for Heroes</button>`}
+          </div>` : ''}
           <div class="er-side-toggle">
             <button type="button" class="${combat.currentSide==='monsters'?'active':''}" onclick="app.setCombatSide('monsters')">Monsters' Turn</button>
             <button type="button" class="${combat.currentSide==='heroes'?'active':''}" onclick="app.setCombatSide('heroes')">Heroes' Turn</button>
@@ -16160,6 +16363,7 @@ function renderModal(){
 
   const type = state.pickerOpen;
   if(type==='encounterBuilder'){ modalRoot.innerHTML = renderEncounterBuilderModal(); return; }
+  if(type==='campaignPacks'){ modalRoot.innerHTML = renderCampaignPackModal(); return; }
   if(!state.current){ modalRoot.innerHTML=''; return; }
   if(type==='subclass'){ modalRoot.innerHTML = renderSubclassModal(state.current); return; }
   if(type==='censorDomain'){ modalRoot.innerHTML = renderCensorDomainModal(state.current); return; }
