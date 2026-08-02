@@ -327,6 +327,9 @@ button{cursor:pointer;}
 .condition-x:hover{opacity:1;}
 .condition-add-form{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;padding:8px 10px;background:var(--bg-panel);border:1px solid var(--line-soft);border-radius:2px;}
 .condition-add-form select,.condition-add-form input{font-family:'JetBrains Mono';font-size:12px;background:var(--bg-raised);border:1px solid var(--line-soft);color:var(--text);padding:4px 6px;border-radius:2px;}
+.picker-step-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 22px;border-bottom:1px solid var(--line-soft);}
+.picker-step-label{font-family:'Bitter',serif;font-weight:600;font-size:13.5px;color:var(--text);text-align:center;flex:1;}
+@media(max-width:640px){ .picker-step-nav{flex-wrap:wrap;} .picker-step-label{order:3;flex-basis:100%;text-align:center;margin-top:4px;} }
 .malice-cost-pill{background:var(--forge);color:#1a1005;border-color:var(--forge);font-weight:700;}
 .picker-card.custom{border-style:dashed;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text-faint);font-family:'Bitter',serif;font-weight:600;letter-spacing:1px;text-transform:uppercase;font-size:12.5px;}
 .picker-card.custom:hover{color:var(--forge);}
@@ -12011,7 +12014,8 @@ const state = {
   grantTitleHeroId: null,  // hero id currently receiving a Director-granted title, or null
   pickerOpen: null,        // null | 'ancestry' | 'career' | 'class'
   expandedAbilityIds: new Set(),  // UI-only: which ability rows are expanded, not persisted
-  expandedPickerAbilities: new Set(), // UI-only: which cards in the Choose Abilities picker (task #147) show full effect text
+  collapsedPickerAbilities: new Set(), // UI-only: which cards in the Choose Abilities picker are manually collapsed (task #171 -- stepped picker, so cards default OPEN now that each step shows far fewer of them)
+  abilityPickerStep: 0,           // UI-only: which step (Signature, then one per cost tier) the stepped ability picker is showing
   abilityTargetChoice: {},  // UI-only: last-picked enemy target id per ability id (task #149 -- keeps the select from resetting to the first option on re-render)
   abilityDamageOverride: {}, // UI-only: player's own edit to the Apply Damage input, if any (task #150 -- same uncontrolled-input problem as #149)
   expandedEffectEditors: new Set(), // UI-only: which ability rows show the raw Effect textarea (task #151)
@@ -13005,6 +13009,7 @@ const app = {
   closeLevelUpToPicker(type){
     state.levelUpFlow = null;
     state.pickerOpen = type;
+    state.abilityPickerStep = 0;
     render();
   },
   closeLevelUpToTab(tab){
@@ -13034,7 +13039,7 @@ const app = {
     setTimeout(()=>{ state.campaignSavedFlash = false; renderMain(); }, 1800);
   },
 
-  openPicker(type){ state.pickerDetailItem = null; state.pickerOpen = type; render(); },
+  openPicker(type){ state.pickerDetailItem = null; state.pickerOpen = type; state.abilityPickerStep = 0; render(); },
   showPickerDetail(type, name){ state.pickerDetailItem = { type, name }; render(); },
   closePickerDetail(){ state.pickerDetailItem = null; render(); },
   closePicker(){ state.pickerOpen = null; state.pickerDetailItem = null; render(); },
@@ -13378,8 +13383,24 @@ const app = {
   // part of each card down to name/tags/Add button so the list is scannable
   // on a phone instead of every ability's full tier table being open at once.
   toggleAbilityPickCard(key){
-    if(state.expandedPickerAbilities.has(key)) state.expandedPickerAbilities.delete(key);
-    else state.expandedPickerAbilities.add(key);
+    if(state.collapsedPickerAbilities.has(key)) state.collapsedPickerAbilities.delete(key);
+    else state.collapsedPickerAbilities.add(key);
+    render();
+  },
+  // Stepped ability picker (task #171): one step -- Signature, then one per
+  // heroic cost tier -- shown at a time, per the user's own request for a
+  // wizard-style flow instead of one long scrolling list. Clamped so
+  // repeated clicks near either end can't walk the index out of range.
+  abilityPickerGoTo(step){
+    state.abilityPickerStep = Math.max(0, step);
+    render();
+  },
+  abilityPickerNext(maxStep){
+    state.abilityPickerStep = Math.min(maxStep, state.abilityPickerStep + 1);
+    render();
+  },
+  abilityPickerPrev(){
+    state.abilityPickerStep = Math.max(0, state.abilityPickerStep - 1);
     render();
   },
   toggleSkillsEditMode(){
@@ -13743,14 +13764,28 @@ function renderMain(){
     attachSwipeHandlers(main);
   }
 
-  // Scroll-position guard (fixes the character-creation "flicker back to
-  // top" bug): capture wherever the user actually is -- #main's own scrollTop
-  // on desktop, the document's scroll on mobile (where #main doesn't scroll,
-  // see the mobile `.main{overflow:visible}` override) -- and restore it
-  // after the innerHTML swap below, on the next frame so layout has settled.
+  // Scroll-position guard (originally #144, revised #173): capture wherever
+  // the user actually is -- #main's own scrollTop on desktop, the document's
+  // scroll on mobile (where #main doesn't scroll, see the mobile
+  // `.main{overflow:visible}` override) -- and restore it after the
+  // innerHTML swap below, on the next frame so layout has settled.
+  //
+  // #173: the original version restored on EVERY render, including
+  // navigating to a genuinely different screen (Next/Back between wizard
+  // steps, switching tabs). That's backwards -- a new screen SHOULD render
+  // at the top, but this was un-doing that a frame later by jumping back
+  // down to wherever the OLD screen had been scrolled, which is exactly
+  // the visible flash/jump users kept reporting as "flicker" even after
+  // #144 shipped. Only restore when re-rendering the SAME screen (typing
+  // in a field, picking an option, toggling something) -- that's the
+  // in-place-edit case the guard was actually meant to fix.
+  const __renderKey = state.wizardActive ? `wizard:${state.wizardStep}` : `${state.view}:${state.activeTab||''}:${state.currentId||''}`;
+  const __sameScreen = state._lastRenderKey === __renderKey;
+  state._lastRenderKey = __renderKey;
   const __prevMainScroll = main.scrollTop;
   const __prevDocScroll = window.scrollY || document.documentElement.scrollTop || 0;
   const __restoreScroll = () => {
+    if(!__sameScreen) return;
     if(main.scrollTop === 0 && __prevMainScroll > 0) main.scrollTop = __prevMainScroll;
     if((window.scrollY||0) === 0 && __prevDocScroll > 0) window.scrollTo(0, __prevDocScroll);
   };
@@ -15631,7 +15666,7 @@ function renderWizardStepBody(key, c){
   if(key === 'skills'){
     return `
       <h2>Train Your Skills</h2>
-      ${renderSkills(c)}
+      ${renderSkills(c, true)}
     `;
   }
   if(key === 'review'){
@@ -15994,14 +16029,20 @@ function renderCultureModal(aspectKey){
 // live checkbox invited accidental untraining mid-session. Default view is
 // just "what am I trained in, by category" -- the full pick/rename/add/remove
 // toolkit from before still exists, now behind one explicit Edit toggle.
-function renderSkills(c){
+function renderSkills(c, forceEdit){
   const groups = {};
   c.skills.forEach(s=>{ (groups[s.group] = groups[s.group]||[]).push(s); });
   const groupNames = Object.keys(SKILL_GROUPS_SEED).concat(Object.keys(groups).filter(g=>!SKILL_GROUPS_SEED[g]));
   const uniqueGroups = [...new Set(groupNames)];
   const cls = findClassData(c.class);
   const career = findCareerData(c.career);
-  const editing = !!state.skillsEditMode;
+  // #173: the Character Creation wizard's Skills step needs the interactive
+  // trainer, not the day-to-day read-only summary (#168) -- a brand-new
+  // hero has nothing trained yet, so the summary view would show an empty
+  // page with only a small "Edit Skills" button, hiding the actual task of
+  // this step. forceEdit lets the wizard opt back into the full picker
+  // regardless of the ambient skillsEditMode toggle.
+  const editing = forceEdit || !!state.skillsEditMode;
 
   if(!editing){
     const trainedByGroup = uniqueGroups.map(g=>({ group:g, list:(groups[g]||[]).filter(s=>s.trained) })).filter(g=>g.list.length);
@@ -16932,16 +16973,31 @@ function renderClassAbilityModal(c){
       return na - nb;
     }).map(key=>({ key, items: tiers[key] }));
   }
-  // task #147: cards default to collapsed (name + tags + Add button only) --
-  // tapping the header reveals the full tier table. On a phone, a picker
-  // grid of a dozen-plus abilities all fully expanded is a wall of text with
-  // no way to scan for the one you want; collapsed-by-default mirrors the
-  // same pattern already used for the Abilities tab's own ability rows.
+  // Stepped picker (task #171): the old layout stacked Signature plus every
+  // heroic cost tier into one long scrolling page -- fine for a class with
+  // a dozen abilities, a wall of tiny cards for one with Null's 46. The
+  // user asked specifically for a wizard: Signature first (bigger cards,
+  // since only a handful show at once), then Next through each cost tier
+  // in order. Locked (above-level) tiers get their own steps at the end
+  // rather than a separate collapsed toggle, so Next naturally walks the
+  // whole class instead of hiding content behind a second control.
+  const steps = [
+    { label: `Signature — choose ${sigChoose}`, sub: `${sigChosenCount}/${sigChoose} added`, items: data.signature, kind: 'signature' },
+    ...groupByTier(availableHeroic).map(tier => ({ label: `Heroic — ${tier.key}`, sub: `available at Lvl ${c.level}`, items: tier.items, kind: 'heroic' })),
+    ...groupByTier(lockedHeroic).map(tier => ({ label: `Heroic — ${tier.key}`, sub: 'above your level', items: tier.items, kind: 'heroic', locked: true })),
+  ];
+  const stepIdx = Math.min(state.abilityPickerStep || 0, steps.length - 1);
+  const step = steps[stepIdx];
+  // task #147 (then #171): cards default OPEN now -- each step shows only
+  // one tier's worth, so the original collapse-by-default reasoning (a
+  // dozen-plus cards on screen at once being a wall of text) no longer
+  // applies. A card can still be individually collapsed if a player wants
+  // to scan names only.
   function cardHtml(ability, kind){
     const added = addedNames.has(ability.name);
     const dim = ability.minLevel && ability.minLevel > c.level;
     const key = kind + '::' + ability.name;
-    const cardExpanded = state.expandedPickerAbilities.has(key);
+    const cardExpanded = !state.collapsedPickerAbilities.has(key);
     const tags = [];
     if(ability.subclassGroup) tags.push(ability.subclassGroup);
     if(ability.minLevel) tags.push('Lvl '+ability.minLevel+'+');
@@ -16964,29 +17020,19 @@ function renderClassAbilityModal(c){
   <div class="modal-backdrop" onclick="app.closePicker()">
     <div class="modal-panel" onclick="event.stopPropagation()">
       <div class="modal-header"><h2>${escapeHtml(c.class)} Abilities</h2><button class="modal-close" onclick="app.closePicker()">✕</button></div>
-      <div class="modal-note">Read a card, then use its button to add or remove it from your Abilities tab. Resource: ${escapeHtml(data.resource)}.</div>
-      <div style="padding:14px 22px 4px;"><span class="h-label">Signature — choose ${sigChoose} (${sigChosenCount}/${sigChoose} added)</span></div>
-      <div class="picker-grid picker-grid-wide" style="padding-top:0;">
-        ${data.signature.map(s=>cardHtml(s,'signature')).join('')}
+      <div class="modal-note">Read a card, then use its button to add or remove it from your Abilities tab. Resource: ${escapeHtml(data.resource)}. Step ${stepIdx+1} of ${steps.length}.</div>
+      <div class="picker-step-nav">
+        <button type="button" class="hs-edit-btn" style="margin:0;" ${stepIdx===0?'disabled':''} onclick="app.abilityPickerPrev()">← Back</button>
+        <span class="picker-step-label">${escapeHtml(step.label)}${step.sub?` <span class="array-hint" style="margin:0;">(${escapeHtml(step.sub)})</span>`:''}</span>
+        <button type="button" class="hs-edit-btn" style="margin:0;" ${stepIdx>=steps.length-1?'disabled':''} onclick="app.abilityPickerNext(${steps.length-1})">Next →</button>
       </div>
-      ${groupByTier(availableHeroic).map(tier=>`
-        <div style="padding:14px 22px 4px;"><span class="h-label">Heroic — ${escapeHtml(tier.key)} (available at Lvl ${c.level})</span></div>
-        <div class="picker-grid picker-grid-wide" style="padding-top:0;">
-          ${tier.items.map(h=>cardHtml(h,'heroic')).join('')}
-        </div>
-      `).join('')}
-      ${lockedHeroic.length ? `
-        <button type="button" class="locked-abilities-toggle" onclick="app.toggleLockedAbilities()">${state.lockedAbilitiesExpanded ? '▾ Hide' : '▸ Show'} ${lockedHeroic.length} Heroic Abilit${lockedHeroic.length===1?'y':'ies'} above your level</button>
-        ${state.lockedAbilitiesExpanded ? groupByTier(lockedHeroic).map(tier=>`
-          <div style="padding:14px 22px 4px;"><span class="h-label">Heroic — ${escapeHtml(tier.key)} (not yet available)</span></div>
-          <div class="picker-grid picker-grid-wide" style="padding-top:0;">
-            ${tier.items.map(h=>cardHtml(h,'heroic')).join('')}
-          </div>
-        `).join('') : ''}
-      ` : ''}
+      <div class="picker-grid picker-grid-wide" style="padding-top:6px;">
+        ${step.items.length ? step.items.map(h=>cardHtml(h, step.kind)).join('') : `<div class="abilities-empty">Nothing in this step.</div>`}
+      </div>
     </div>
   </div>`;
 }
+
 function renderDowntimeArchetypeModal(){
   const cats = Object.keys(DOWNTIME_PROJECTS.categories);
   return `
